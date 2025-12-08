@@ -1,0 +1,38 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: pluto-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pluto
+      POSTGRES_PASSWORD: pluto
+      POSTGRES_DB: pluto
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Enable pgvector in init scripts if needed:
+    #   CREATE EXTENSION IF NOT EXISTS "vector";
+
+  # gateway:
+  #   build: ./gateway
+  #   env_file: .env
+  #   depends_on:
+  #     - postgres
+  #   command: npm run dev
+  #   # Expose when ready: ports:
+  #   #   - "4000:4000"
+
+  # brain:
+  #   build: ./brain
+  #   env_file: .env
+  #   depends_on:
+  #     - postgres
+  #   command: poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000
+  #   # Expose when ready: ports:
+  #   #   - "8000:8000"
+
+volumes:
+  postgres_data:
