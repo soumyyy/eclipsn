@@ -1,21 +1,21 @@
 export function Sidebar() {
   return (
-    <div className="space-y-6">
+    <div>
       <div>
-        <h1 className="text-2xl font-semibold">Pluto</h1>
-        <p className="text-sm text-slate-400">Personal agent prototype</p>
+        <h1>PLUTO</h1>
+        <p className="text-accent">Operator Console</p>
       </div>
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Activity</h2>
-        <p className="text-sm text-slate-300">Recent actions will appear here.</p>
+      <section className="sidebar-section">
+        <h2>Activity</h2>
+        <p>Awaiting mission data…</p>
       </section>
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Tasks</h2>
-        <p className="text-sm text-slate-300">Pluto will list tasks extracted from Gmail.</p>
+      <section className="sidebar-section">
+        <h2>Tasks</h2>
+        <p>Gmail-derived tasks will materialize here.</p>
       </section>
-      <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Gmail</h2>
-        <p className="text-sm text-slate-300">Connect Gmail via the gateway OAuth flow.</p>
+      <section className="sidebar-section">
+        <h2>Gmail</h2>
+        <p>Initiate OAuth linkup to ingest signals.</p>
       </section>
     </div>
   );

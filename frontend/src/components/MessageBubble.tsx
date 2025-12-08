@@ -5,19 +5,13 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ role, content }: MessageBubbleProps) {
   const isUser = role === 'user';
+  const containerClass = `message-row ${isUser ? 'user' : 'assistant'}`;
+  const bubbleClass = `message-bubble ${isUser ? 'user' : 'assistant'}`;
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-xl rounded-2xl px-4 py-2 text-sm leading-relaxed ${
-          isUser
-            ? 'bg-blue-600 text-white'
-            : 'bg-slate-800 text-slate-100'
-        }`}
-      >
-        <p className="whitespace-pre-line">{content}</p>
-        <span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-300 opacity-70">
-          {isUser ? 'You' : 'Pluto'}
-        </span>
+    <div className={containerClass}>
+      <div className={bubbleClass}>
+        <p className="message-text">{content}</p>
+        <span className="message-label">{isUser ? 'USER' : 'PLUTO'}</span>
       </div>
     </div>
   );

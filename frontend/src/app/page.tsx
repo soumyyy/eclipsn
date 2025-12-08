@@ -59,12 +59,11 @@ export default function ChatPage() {
   const sidebar = <Sidebar />;
   return (
     <ChatLayout sidebar={sidebar}>
-      <div className="flex h-screen flex-col">
-        <div className="flex-1 space-y-4 overflow-y-auto bg-slate-950 p-6">
+      <>
+        <div className="chat-stream">
           {messages.length === 0 ? (
-            <p className="text-sm text-slate-400">
-              Start a conversation and Pluto will fetch context from Gmail and memories when
-              available.
+            <p className="message-bubble assistant">
+              &gt; Awaiting input… Pluto will synthesize context from Gmail and memory banks when available.
             </p>
           ) : (
             messages.map((message) => (
@@ -72,28 +71,19 @@ export default function ChatPage() {
             ))
           )}
         </div>
-        <form
-          onSubmit={handleSubmit}
-          className="border-t border-slate-900 bg-slate-900 p-4"
-        >
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              placeholder="Ask Pluto anything..."
-              onChange={(event) => setInput(event.target.value)}
-              className="flex-1 rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={isSending}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {isSending ? 'Sending...' : 'Send'}
-            </button>
-          </div>
+        <form onSubmit={handleSubmit} className="chat-input-bar">
+          <input
+            type="text"
+            value={input}
+            placeholder="Transmit message…"
+            onChange={(event) => setInput(event.target.value)}
+            className="chat-input"
+          />
+          <button type="submit" disabled={isSending} className="chat-send">
+            {isSending ? 'SENDING…' : 'SEND'}
+          </button>
         </form>
-      </div>
+      </>
     </ChatLayout>
   );
 }
