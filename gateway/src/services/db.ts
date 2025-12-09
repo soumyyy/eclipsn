@@ -195,3 +195,89 @@ export async function removeExpiredGmailThreads(userId: string) {
     client.release();
   }
 }
+
+export async function getUserProfile(userId: string) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT full_name as "fullName",
+              preferred_name as "preferredName",
+              timezone,
+              contact_email as "contactEmail",
+              phone,
+              company,
+              role,
+              preferences,
+              biography,
+              custom_data as "customData",
+              updated_at as "updatedAt"
+       FROM user_profiles
+       WHERE user_id = $1`,
+      [userId]
+    );
+    if (result.rowCount === 0) {
+      return null;
+    }
+    return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+export async function upsertUserProfile(userId: string, data: Record<string, unknown>) {
+  const client = await pool.connect();
+  try {
+    const existingRes = await client.query(
+      `SELECT full_name,
+              preferred_name,
+              timezone,
+              contact_email,
+              phone,
+              company,
+              role,
+              preferences,
+              biography,
+              custom_data
+       FROM user_profiles
+       WHERE user_id = $1`,
+      [userId]
+    );
+    const existing = existingRes.rows[0] || {};
+    const incomingCustom = (data.customData ?? data.custom_data ?? {}) as Record<string, unknown>;
+    const existingCustom = (existing.custom_data ?? {}) as Record<string, unknown>;
+    const mergedCustom = { ...existingCustom, ...incomingCustom };
+    const preferences = data.preferences ?? existing.preferences ?? null;
+
+    await client.query(
+      `INSERT INTO user_profiles (user_id, full_name, preferred_name, timezone, contact_email, phone, company, role, preferences, biography, custom_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (user_id)
+       DO UPDATE SET full_name = EXCLUDED.full_name,
+                     preferred_name = EXCLUDED.preferred_name,
+                     timezone = EXCLUDED.timezone,
+                     contact_email = EXCLUDED.contact_email,
+                     phone = EXCLUDED.phone,
+                     company = EXCLUDED.company,
+                     role = EXCLUDED.role,
+                     preferences = EXCLUDED.preferences,
+                     biography = EXCLUDED.biography,
+                     custom_data = EXCLUDED.custom_data,
+                     updated_at = NOW()`,
+      [
+        userId,
+        data.fullName ?? data.full_name ?? existing.full_name ?? null,
+        data.preferredName ?? data.preferred_name ?? existing.preferred_name ?? null,
+        data.timezone ?? existing.timezone ?? null,
+        data.contactEmail ?? data.contact_email ?? existing.contact_email ?? null,
+        data.phone ?? existing.phone ?? null,
+        data.company ?? existing.company ?? null,
+        data.role ?? existing.role ?? null,
+        preferences,
+        data.biography ?? existing.biography ?? null,
+        mergedCustom
+      ]
+    );
+  } finally {
+    client.release();
+  }
+}

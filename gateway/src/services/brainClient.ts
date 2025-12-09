@@ -6,6 +6,7 @@ interface ChatPayload {
   conversationId: string;
   message: string;
   history?: Array<{ role: string; content: string }>;
+  profile?: Record<string, unknown> | null;
 }
 
 export async function sendChat(payload: ChatPayload) {
@@ -13,7 +14,8 @@ export async function sendChat(payload: ChatPayload) {
     user_id: payload.userId,
     conversation_id: payload.conversationId,
     message: payload.message,
-    history: payload.history ?? []
+    history: payload.history ?? [],
+    profile: payload.profile ?? null
   });
 
   return response.data;

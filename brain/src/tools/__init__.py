@@ -7,6 +7,7 @@ from .gmail_tools import (
     gmail_semantic_search_tool,
 )
 from .web_search import web_search_tool
+from .profile_tools import profile_update_tool
 
 __all__ = [
     "search_memories_tool",
@@ -16,5 +17,6 @@ __all__ = [
     "gmail_summarize_thread_tool",
     "gmail_extract_tasks_tool",
     "gmail_semantic_search_tool",
+    "profile_update_tool",
     "web_search_tool",
 ]

@@ -7,6 +7,21 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS user_profiles (
+    user_id UUID PRIMARY KEY REFERENCES users(id),
+    full_name TEXT,
+    preferred_name TEXT,
+    timezone TEXT,
+    contact_email TEXT,
+    phone TEXT,
+    company TEXT,
+    role TEXT,
+    preferences JSONB,
+    biography TEXT,
+    custom_data JSONB DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id),

@@ -15,7 +15,8 @@
     "express": "^4.22.1",
     "googleapis": "126.0.1",
     "openai": "^6.10.0",
-    "pg": "8.11.3"
+    "pg": "8.11.3",
+    "node-cron": "3.0.3"
   },
   "devDependencies": {
     "@types/cookie-parser": "1.4.3",

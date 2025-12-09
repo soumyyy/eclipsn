@@ -10,6 +10,21 @@ create table if not exists users (
     created_at timestamptz not null default now()
 );
 
+create table if not exists user_profiles (
+    user_id uuid primary key references users(id),
+    full_name text,
+    preferred_name text,
+    timezone text,
+    contact_email text,
+    phone text,
+    company text,
+    role text,
+    preferences jsonb,
+    biography text,
+    custom_data jsonb default '{}'::jsonb,
+    updated_at timestamptz not null default now()
+);
+
 create table if not exists conversations (
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null references users(id),

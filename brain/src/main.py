@@ -29,7 +29,8 @@ async def chat_endpoint(request: ChatRequest):
             user_id=request.user_id,
             conversation_id=request.conversation_id,
             message=request.message,
-            history=request.history
+            history=request.history,
+            profile=request.profile
         )
         return result
     except Exception as exc:  # pylint: disable=broad-except

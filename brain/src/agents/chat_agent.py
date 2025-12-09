@@ -1,11 +1,12 @@
 import json
 import logging
 import re
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.tools import Tool
+from langchain_core.tools import Tool, StructuredTool
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 
 from ..config import get_settings
 from ..models.schemas import ChatResponse, SearchSource
@@ -14,7 +15,28 @@ from ..tools import (
     web_search_tool,
     gmail_search_tool,
     gmail_semantic_search_tool,
+    profile_update_tool,
 )
+
+
+class ProfileUpdateInput(BaseModel):
+    field: Optional[str] = Field(
+        default=None,
+        description="Profile field to update. Allowed keys include preferred_name, full_name, timezone, etc."
+    )
+    value: Optional[str] = Field(default=None, description="Value to store for the provided field.")
+    note: Optional[str] = Field(default=None, description="Free-form note about the user.")
+
+    @root_validator
+    def validate_payload(cls, values: Dict) -> Dict:
+        field = values.get("field")
+        value = values.get("value")
+        note = values.get("note")
+        if not field and not note:
+            raise ValueError("Provide either a (field, value) pair or a note.")
+        if field and not value:
+            raise ValueError("Value is required when field is provided.")
+        return values
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +47,7 @@ Formatting rules:
 - When referencing outside data, mention the publication/source name in plain text (e.g., "According to Indian Express..."), but leave actual links for the UI to display.
 - Use the gmail_inbox tool whenever the user asks about recent emails, Gmail, inbox activity, or "what's new" in their mail.
 - Use gmail_semantic_search when the user asks about a specific topic, sender, or historical email so you can retrieve the closest matches from their Gmail history.
+- When the user shares personal preferences or profile details, call profile_update to store them. Provide JSON with "field" and "value" if it maps to a known field, or "note" for free-form info.
 - Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary."""
 
 
@@ -78,6 +101,9 @@ def _build_tools(user_id: str) -> List[Tool]:
     async def gmail_semantic_coro(q: str) -> str:
         return await gmail_semantic_search_tool(user_id=user_id, query=q, limit=5)
 
+    async def profile_coro(field: str | None = None, value: str | None = None, note: str | None = None) -> str:
+        return await profile_update_tool(field=field, value=value, note=note)
+
     return [
         Tool(
             name="memory_lookup",
@@ -103,6 +129,13 @@ def _build_tools(user_id: str) -> List[Tool]:
             coroutine=gmail_semantic_coro,
             description="Use semantic search over Gmail history when the user asks about a specific topic, person, or past email."
         ),
+        StructuredTool(
+            name="profile_update",
+            func=lambda field=None, value=None, note=None: "Profile update available only in async mode.",
+            coroutine=profile_coro,
+            args_schema=ProfileUpdateInput,
+            description="Update the user's profile with a structured argument object containing either field/value or a free-form note."
+        ),
     ]
 
 
@@ -119,6 +152,7 @@ async def run_chat_agent(
     conversation_id: str,
     message: str,
     history: Optional[List[dict]] = None,
+    profile: Optional[Dict] = None,
 ) -> ChatResponse:
     _ = conversation_id  # TODO: fetch conversation history for better context.
     llm = await _load_llm()
@@ -131,11 +165,12 @@ async def run_chat_agent(
         )
 
     tools = _build_tools(user_id)
+    profile_str = json.dumps(profile, indent=2) if profile else "(no profile info)"
     prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
+        ("system", SYSTEM_PROMPT + "\n\nUser profile JSON:\n{profile_json}"),
         ("human", "Recent conversation:\n{chat_history}\n\nUser message:\n{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad")
-    ])
+    ]).partial(profile_json=profile_str)
 
     agent = create_openai_functions_agent(llm, tools, prompt)
     executor = AgentExecutor(agent=agent, tools=tools, verbose=False)

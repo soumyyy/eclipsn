@@ -4,6 +4,8 @@ import cookieParser from 'cookie-parser';
 import { config } from './config';
 import chatRouter from './routes/chat';
 import gmailRouter from './routes/gmail';
+import profileRouter from './routes/profile';
+import { scheduleGmailJobs } from './jobs/gmailJobs';
 // import { graphqlHTTP } from 'express-graphql';
 // import { schema } from './graphql/schema';
 // import { rootValue } from './graphql/resolvers';
@@ -20,6 +22,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/chat', chatRouter);
 app.use('/api/gmail', gmailRouter);
+app.use('/api/profile', profileRouter);
 
 // GraphQL stub for future dashboards
 // app.use('/graphql', graphqlHTTP({
@@ -30,4 +33,5 @@ app.use('/api/gmail', gmailRouter);
 
 app.listen(config.port, () => {
   console.log(`Gateway listening on port ${config.port}`);
+  scheduleGmailJobs();
 });

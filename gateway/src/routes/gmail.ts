@@ -3,9 +3,9 @@ import { getAuthUrl, exchangeCodeForTokens } from '../services/gmailOAuth';
 import { saveGmailTokens, removeExpiredGmailThreads, searchGmailEmbeddings } from '../services/db';
 import { fetchRecentThreads, getGmailProfile, NO_GMAIL_TOKENS } from '../services/gmailClient';
 import { embedEmailText } from '../services/embeddings';
+import { TEST_USER_ID } from '../constants';
 
 const router = Router();
-const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 router.get('/connect', (req, res) => {
   const state = req.query.state?.toString() || 'pluto-dev';

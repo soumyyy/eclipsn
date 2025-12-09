@@ -7,6 +7,7 @@ class ChatRequest(BaseModel):
     conversation_id: str = Field(..., description="Conversation identifier")
     message: str = Field(..., description="Latest user utterance")
     history: List[dict] = Field(default_factory=list)
+    profile: Optional[dict] = Field(default=None)
 
 
 class SearchSource(BaseModel):

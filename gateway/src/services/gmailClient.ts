@@ -62,6 +62,7 @@ interface ThreadFilters {
   startDate?: string;
   endDate?: string;
   pageToken?: string;
+  customQuery?: string;
 }
 
 export async function fetchRecentThreads(
@@ -71,7 +72,9 @@ export async function fetchRecentThreads(
 ): Promise<{ threads: GmailThreadSummary[]; nextPageToken?: string; counts: Record<string, number> }> {
   const gmail = await getAuthorizedGmail(userId);
   const fetchLimit = Math.min(filters.maxResults ?? maxResults ?? 20, 1000);
-  const query = buildQuery(filters.startDate, filters.endDate, filters.importanceOnly !== false);
+  const query = filters.customQuery
+    ? filters.customQuery
+    : buildQuery(filters.startDate, filters.endDate, filters.importanceOnly !== false);
   const threadList = await gmail.users.threads.list({
     userId: 'me',
     maxResults: fetchLimit,

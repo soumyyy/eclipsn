@@ -47,6 +47,12 @@ Visit http://localhost:3000, send a chat message, and the UI will proxy through 
 - Tokens are stored in `gmail_tokens` table (currently in plaintext; future work will encrypt them).
 - After connecting Gmail (`GET /api/gmail/connect`), call `GET /api/gmail/threads?limit=5` to sync the latest threads into Postgres and return summaries to the UI/brain layer.
 - Set `GATEWAY_INTERNAL_URL` so the Python brain can call the gateway when it needs Gmail context during a chat.
+- The gateway now runs background jobs: an incremental sync every 10 minutes (`newer_than:10m` filter) and a midnight cleanup that deletes expired Gmail summaries.
+
+## User Profile Notes
+- Each user now has a profile row (`user_profiles`) that stores preferred name, contact info, timezone, company/role, and arbitrary `custom_data` for facts Pluto learns.
+- Use `GET/POST /api/profile` from the gateway to display or update profile data in the UI.
+- The brain exposes a `profile_update` tool; Pluto calls it automatically when the user shares new personal information, so the agent can remember preferences naturally.
 
 ## Web Search Notes
 - Pluto uses Tavily for web intelligence. Set `TAVILY_API_KEY` in `.env` to enable it.
