@@ -8,6 +8,7 @@ interface GmailStatus {
   connected: boolean;
   email?: string;
   avatarUrl?: string;
+  name?: string;
 }
 
 export function Sidebar() {
@@ -24,7 +25,8 @@ export function Sidebar() {
         setGmailStatus({
           connected: Boolean(data.connected),
           email: data.email,
-          avatarUrl: data.avatarUrl
+          avatarUrl: data.avatarUrl,
+          name: data.name
         });
       } catch (error) {
         console.error('Failed to load Gmail status', error);
@@ -67,8 +69,7 @@ export function Sidebar() {
                 )}
               </div>
               <div>
-                <p className="gmail-email">{gmailStatus.email ?? 'Connected account'}</p>
-                <span className="gmail-status">Connected</span>
+                <p className="gmail-email">{gmailStatus.name ?? gmailStatus.email ?? 'Gmail account'}</p>
               </div>
             </div>
           </div>

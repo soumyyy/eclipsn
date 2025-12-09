@@ -38,6 +38,9 @@ export default function ChatPage() {
 
     const placeholderId = crypto.randomUUID();
     const expectsWeb = shouldSuggestWebSearch(userMessage.content);
+    const historyPayload = messages
+      .slice(-6)
+      .map(({ role, content }) => ({ role, content }));
     const placeholderMessage: ChatMessage = {
       id: placeholderId,
       role: 'assistant',
@@ -53,7 +56,8 @@ export default function ChatPage() {
 
     try {
       const response = await post('/api/chat', {
-        message: userMessage.content
+        message: userMessage.content,
+        history: historyPayload
       });
 
       const assistantMessage: ChatMessage = {

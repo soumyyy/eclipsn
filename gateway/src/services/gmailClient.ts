@@ -142,14 +142,15 @@ export async function fetchRecentThreads(
   return { threads: summaries, nextPageToken: threadList.data.nextPageToken, counts };
 }
 
-export async function getGmailProfile(userId: string): Promise<{ email: string; avatarUrl: string }> {
+export async function getGmailProfile(userId: string): Promise<{ email: string; avatarUrl: string; name: string }> {
   const gmail = await getAuthorizedGmail(userId);
   const profile = await gmail.users.getProfile({ userId: 'me' });
   const email = profile.data.emailAddress || '';
+  const name = email ? email.split('@')[0] : 'Gmail user';
   const avatarUrl = email
     ? `https://www.google.com/s2/photos/public/${encodeURIComponent(email)}?sz=96`
     : '';
-  return { email, avatarUrl };
+  return { email, avatarUrl, name };
 }
 
 const PROMO_KEYWORDS = ['unsubscribe', 'sale', '% off', 'deal', 'promo', 'special offer'];

@@ -106,7 +106,20 @@ def _build_tools(user_id: str) -> List[Tool]:
     ]
 
 
-async def run_chat_agent(user_id: str, conversation_id: str, message: str) -> ChatResponse:
+def _format_history(history: Optional[List[dict]], max_items: int = 6) -> str:
+    if not history:
+        return "(no recent conversation)"
+    trimmed = history[-max_items:]
+    lines = [f"{item.get('role','user')}: {item.get('content','')}" for item in trimmed]
+    return "\n".join(lines)
+
+
+async def run_chat_agent(
+    user_id: str,
+    conversation_id: str,
+    message: str,
+    history: Optional[List[dict]] = None,
+) -> ChatResponse:
     _ = conversation_id  # TODO: fetch conversation history for better context.
     llm = await _load_llm()
     if not llm:
@@ -120,14 +133,15 @@ async def run_chat_agent(user_id: str, conversation_id: str, message: str) -> Ch
     tools = _build_tools(user_id)
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ("human", "{input}")
+        ("human", "Recent conversation:\n{chat_history}\n\nUser message:\n{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad")
     ])
 
     agent = create_openai_functions_agent(llm, tools, prompt)
     executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
 
-    result = await executor.ainvoke({"input": message})
+    history_str = _format_history(history)
+    result = await executor.ainvoke({"input": message, "chat_history": history_str})
     raw_reply = result.get("output", "")
 
     tool_calls = result.get("intermediate_steps", [])

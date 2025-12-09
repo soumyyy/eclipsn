@@ -28,7 +28,8 @@ async def chat_endpoint(request: ChatRequest):
         result = await run_chat_agent(
             user_id=request.user_id,
             conversation_id=request.conversation_id,
-            message=request.message
+            message=request.message,
+            history=request.history
         )
         return result
     except Exception as exc:  # pylint: disable=broad-except

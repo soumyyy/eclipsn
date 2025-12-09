@@ -64,7 +64,7 @@ router.get('/threads', async (req, res) => {
 router.get('/status', async (_req, res) => {
   try {
     const profile = await getGmailProfile(TEST_USER_ID);
-    return res.json({ connected: true, email: profile.email, avatarUrl: profile.avatarUrl });
+    return res.json({ connected: true, email: profile.email, avatarUrl: profile.avatarUrl, name: profile.name });
   } catch (error) {
     if (error instanceof Error && error.message === NO_GMAIL_TOKENS) {
       return res.json({ connected: false });

@@ -6,7 +6,10 @@ const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 const DEFAULT_CONVERSATION_ID = '00000000-0000-0000-0000-000000000002';
 
 router.post('/', async (req, res) => {
-  const { message } = req.body as { message?: string };
+  const { message, history } = req.body as {
+    message?: string;
+    history?: Array<{ role: string; content: string }>;
+  };
 
   if (!message) {
     return res.status(400).json({ error: 'message is required' });
@@ -16,7 +19,8 @@ router.post('/', async (req, res) => {
     const response = await sendChat({
       userId: TEST_USER_ID,
       conversationId: DEFAULT_CONVERSATION_ID,
-      message
+      message,
+      history
     });
 
     return res.json(response);
