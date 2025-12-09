@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS gmail_threads (
     thread_id TEXT NOT NULL,
     subject TEXT,
     summary TEXT,
+    sender TEXT,
     category TEXT,
     importance_score INT,
     expires_at TIMESTAMPTZ,
@@ -65,6 +66,16 @@ CREATE TABLE IF NOT EXISTS gmail_threads (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_gmail_threads_user_thread ON gmail_threads(user_id, thread_id);
+
+CREATE TABLE IF NOT EXISTS gmail_thread_embeddings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    thread_id UUID NOT NULL REFERENCES gmail_threads(id) ON DELETE CASCADE,
+    embedding VECTOR(1536) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, thread_id)
+);
+CREATE INDEX IF NOT EXISTS idx_gmail_thread_embeddings_user ON gmail_thread_embeddings(user_id);
 
 CREATE TABLE IF NOT EXISTS tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -41,3 +41,4 @@ class GmailThread(BaseModel):
     link: Optional[str] = None
     last_message_at: Optional[str] = None
     category: Optional[str] = None
+    sender: Optional[str] = None

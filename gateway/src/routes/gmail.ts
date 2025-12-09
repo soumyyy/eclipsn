@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { getAuthUrl, exchangeCodeForTokens } from '../services/gmailOAuth';
-import { saveGmailTokens } from '../services/db';
+import { saveGmailTokens, removeExpiredGmailThreads, searchGmailEmbeddings } from '../services/db';
 import { fetchRecentThreads, getGmailProfile, NO_GMAIL_TOKENS } from '../services/gmailClient';
+import { embedEmailText } from '../services/embeddings';
 
 const router = Router();
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
@@ -118,3 +119,31 @@ router.post('/threads/full-sync', async (req, res) => {
 });
 
 export default router;
+
+router.post('/threads/cleanup', async (_req, res) => {
+  try {
+    await removeExpiredGmailThreads(TEST_USER_ID);
+    return res.json({ status: 'ok' });
+  } catch (error) {
+    console.error('Gmail cleanup failed', error);
+    return res.status(500).json({ error: 'Failed to cleanup Gmail threads' });
+  }
+});
+
+router.post('/threads/search', async (req, res) => {
+  const { query, limit } = req.body as { query?: string; limit?: number };
+  if (!query) {
+    return res.status(400).json({ error: 'query is required' });
+  }
+  try {
+    const embedding = await embedEmailText(query);
+    const matches = await searchGmailEmbeddings({ userId: TEST_USER_ID, embedding, limit: limit ?? 5 });
+    return res.json({ threads: matches });
+  } catch (error) {
+    console.error('Semantic gmail search failed', error);
+    if (error instanceof Error && error.message === NO_GMAIL_TOKENS) {
+      return res.status(401).json({ error: 'Gmail not connected' });
+    }
+    return res.status(500).json({ error: 'Failed to search Gmail' });
+  }
+});

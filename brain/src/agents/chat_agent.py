@@ -13,6 +13,7 @@ from ..tools import (
     search_memories_tool,
     web_search_tool,
     gmail_search_tool,
+    gmail_semantic_search_tool,
 )
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ Formatting rules:
 - Do NOT embed raw URLs or inline citations inside your main response. Rely on the UI to show sources separately.
 - When referencing outside data, mention the publication/source name in plain text (e.g., "According to Indian Express..."), but leave actual links for the UI to display.
 - Use the gmail_inbox tool whenever the user asks about recent emails, Gmail, inbox activity, or "what's new" in their mail.
+- Use gmail_semantic_search when the user asks about a specific topic, sender, or historical email so you can retrieve the closest matches from their Gmail history.
 - Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary."""
 
 
@@ -73,6 +75,9 @@ def _build_tools(user_id: str) -> List[Tool]:
     async def gmail_coro(q: str) -> str:
         return await _gmail_tool_output(user_id, q)
 
+    async def gmail_semantic_coro(q: str) -> str:
+        return await gmail_semantic_search_tool(user_id=user_id, query=q, limit=5)
+
     return [
         Tool(
             name="memory_lookup",
@@ -91,6 +96,12 @@ def _build_tools(user_id: str) -> List[Tool]:
             func=lambda q: "Gmail inbox lookup available only in async mode.",
             coroutine=gmail_coro,
             description="Summarize the user's Gmail inbox when they ask about new emails, reminders, or anything in Gmail."
+        ),
+        Tool(
+            name="gmail_semantic_search",
+            func=lambda q: "Semantic Gmail search available only in async mode.",
+            coroutine=gmail_semantic_coro,
+            description="Use semantic search over Gmail history when the user asks about a specific topic, person, or past email."
         ),
     ]
 

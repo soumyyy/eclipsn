@@ -1,6 +1,13 @@
 import { google } from 'googleapis';
 import { config } from '../config';
-import { getGmailTokens, saveGmailTokens, saveGmailThreads, GmailThreadRecord } from './db';
+import {
+  getGmailTokens,
+  saveGmailTokens,
+  saveGmailThreads,
+  GmailThreadRecord,
+  upsertGmailEmbedding
+} from './db';
+import { embedEmailText } from './embeddings';
 
 export const NO_GMAIL_TOKENS = 'NO_GMAIL_TOKENS';
 
@@ -119,10 +126,18 @@ export async function fetchRecentThreads(
     counts[category] = (counts[category] || 0) + 1;
   }
 
-  try {
-    await saveGmailThreads(userId, summaries);
-  } catch (error) {
-    console.warn('Failed to persist gmail threads', error);
+  const rowIds = await saveGmailThreads(userId, summaries);
+  for (let idx = 0; idx < summaries.length; idx += 1) {
+    const summary = summaries[idx];
+    const rowId = rowIds[idx];
+    if (!rowId) continue;
+    try {
+      const textForEmbedding = `${summary.subject}\n${summary.snippet}\nFrom: ${summary.sender ?? ''}`;
+      const embedding = await embedEmailText(textForEmbedding);
+      await upsertGmailEmbedding({ userId, threadRowId: rowId, embedding });
+    } catch (embedError) {
+      console.warn('Failed to embed gmail thread', embedError);
+    }
   }
   return { threads: summaries, nextPageToken: threadList.data.nextPageToken, counts };
 }

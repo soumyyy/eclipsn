@@ -61,6 +61,7 @@ create table if not exists gmail_threads (
     thread_id text not null,
     subject text,
     summary text,
+    sender text,
     category text,
     importance_score integer,
     expires_at timestamptz,
@@ -68,6 +69,16 @@ create table if not exists gmail_threads (
     created_at timestamptz not null default now()
 );
 create unique index if not exists idx_gmail_threads_user_thread on gmail_threads(user_id, thread_id);
+
+create table if not exists gmail_thread_embeddings (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references users(id),
+    thread_id uuid not null references gmail_threads(id) on delete cascade,
+    embedding vector(1536) not null,
+    created_at timestamptz not null default now(),
+    unique (user_id, thread_id)
+);
+create index if not exists idx_gmail_thread_embeddings_user on gmail_thread_embeddings(user_id);
 
 create table if not exists tasks (
     id uuid primary key default gen_random_uuid(),

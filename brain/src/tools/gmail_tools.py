@@ -1,6 +1,6 @@
 from typing import List
 from ..models.schemas import Task, GmailThread
-from ..services.gateway_client import fetch_gmail_threads
+from ..services.gateway_client import fetch_gmail_threads, semantic_gmail_search
 
 
 async def gmail_search_tool(user_id: str, query: str, limit: int = 20) -> List[GmailThread]:
@@ -36,3 +36,20 @@ async def gmail_summarize_thread_tool(user_id: str, thread_id: str) -> str:
 async def gmail_extract_tasks_tool(user_id: str, thread_id: str) -> List[Task]:
     _ = (user_id, thread_id)
     return [Task(id="task-1", description="Reply to client", status="open", due_date=None)]
+
+
+async def gmail_semantic_search_tool(user_id: str, query: str, limit: int = 5) -> str:
+    _ = user_id
+    matches = await semantic_gmail_search(query, limit)
+    if not matches:
+        return "No relevant Gmail threads found."
+
+    lines: List[str] = ["Top Gmail matches:"]
+    for entry in matches:
+        subject = entry.get("subject", "(no subject)")
+        sender = entry.get("sender", "unknown sender")
+        date = entry.get("last_message_at", "")
+        link = entry.get("link", "")
+        lines.append(f"- {subject} — {sender} ({date}) {link}")
+
+    return "\n".join(lines)
