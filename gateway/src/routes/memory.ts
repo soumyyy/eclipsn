@@ -13,9 +13,11 @@ import {
   deleteMemoryIngestion,
   resetIngestionEmbeddings,
   getMemoryIngestionById,
-  clearAllMemoryIngestions
+  clearAllMemoryIngestions,
+  fetchGraphSlice
 } from '../services/db';
 import { triggerMemoryIndexing } from '../services/brainClient';
+import { GraphNodeType } from '../graph/types';
 
 const router = Router();
 const upload = multer({
@@ -101,7 +103,9 @@ function formatIngestion(record: any) {
     completedAt: record.completedAt,
     lastIndexedAt: record.lastIndexedAt,
     batchName: record.batchName,
-    error: record.error
+    error: record.error,
+    graphMetrics: record.graphMetrics ?? null,
+    graphSyncedAt: record.graphSyncedAt ?? null
   };
 }
 
@@ -172,6 +176,29 @@ router.delete('/', async (_req, res) => {
   } catch (error) {
     console.error('Failed to clear bespoke memories', error);
     return res.status(500).json({ error: 'Failed to clear bespoke memories.' });
+  }
+});
+
+router.get('/:ingestionId/graph', async (req, res) => {
+  const ingestionId = req.params.ingestionId;
+  const limit = req.query.limit ? Number(req.query.limit) : undefined;
+  const edgeLimit = req.query.edgeLimit ? Number(req.query.edgeLimit) : undefined;
+  try {
+    const ingestion = await getMemoryIngestionById(ingestionId, TEST_USER_ID);
+    if (!ingestion) {
+      return res.status(404).json({ error: 'Ingestion not found.' });
+    }
+    const graph = await fetchGraphSlice({
+      userId: TEST_USER_ID,
+      ingestionId,
+      nodeTypes: [GraphNodeType.DOCUMENT, GraphNodeType.SECTION, GraphNodeType.CHUNK],
+      limit,
+      edgeLimit
+    });
+    return res.json({ ingestion: formatIngestion(ingestion), graph });
+  } catch (error) {
+    console.error('Failed to load ingestion graph', error);
+    return res.status(500).json({ error: 'Failed to load graph.' });
   }
 });
 

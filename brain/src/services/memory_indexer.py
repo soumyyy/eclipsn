@@ -10,6 +10,7 @@ from langchain_openai import OpenAIEmbeddings
 from ..config import get_settings
 from .database import get_pool
 from .faiss_store import EmbeddingRecord, write_faiss_index
+from .graph_sync import sync_ingestions_to_graph
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,9 @@ async def process_pending_chunks(batch_size: int = 50) -> int:
         counts: dict[str, int] = {}
         for row in rows:
             counts[row.ingestion_id] = counts.get(row.ingestion_id, 0) + 1
-        await update_index_counts(counts)
+        completed_ingestions = await update_index_counts(counts)
+        if completed_ingestions:
+            await sync_ingestions_to_graph(completed_ingestions)
         await rebuild_indices_for_users(row.user_id for row in rows)
         processed_total += len(rows)
         logger.info("Indexed %d bespoke memory chunks (total=%d)", len(rows), processed_total)
@@ -174,9 +177,10 @@ async def mark_ingestions_indexing(ingestion_ids: Iterable[str]) -> None:
                 )
 
 
-async def update_index_counts(counts: dict[str, int]) -> None:
+async def update_index_counts(counts: dict[str, int]) -> list[str]:
     if not counts:
-        return
+        return []
+    completed: list[str] = []
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -214,3 +218,5 @@ async def update_index_counts(counts: dict[str, int]) -> None:
                     """,
                     ingestion_id
                 )
+                completed.append(ingestion_id)
+    return completed

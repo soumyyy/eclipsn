@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { config } from '../config';
+import { GraphEdgeType, GraphNodeType } from '../graph/types';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
@@ -425,6 +426,8 @@ export interface MemoryIngestionRecord {
   completedAt?: Date | null;
   lastIndexedAt?: Date | null;
   batchName?: string | null;
+  graphMetrics?: Record<string, unknown> | null;
+  graphSyncedAt?: Date | null;
 }
 
 export async function createMemoryIngestion(params: { userId: string; source: string; totalFiles: number; batchName?: string }): Promise<string> {
@@ -495,6 +498,8 @@ export async function getLatestMemoryIngestion(userId: string, source: string): 
               mi.completed_at as "completedAt",
               mi.last_indexed_at as "lastIndexedAt",
               mi.batch_name as "batchName",
+              mi.graph_metrics as "graphMetrics",
+              mi.graph_synced_at as "graphSyncedAt",
               COALESCE(chunk_counts.total_chunks, 0) as "totalChunks"
        FROM memory_ingestions mi
        LEFT JOIN (
@@ -531,6 +536,8 @@ export async function listMemoryIngestions(userId: string, limit = 10): Promise<
               mi.completed_at as "completedAt",
               mi.last_indexed_at as "lastIndexedAt",
               mi.batch_name as "batchName",
+              mi.graph_metrics as "graphMetrics",
+              mi.graph_synced_at as "graphSyncedAt",
               COALESCE(chunk_counts.total_chunks, 0) as "totalChunks"
        FROM memory_ingestions mi
        LEFT JOIN (
@@ -590,6 +597,8 @@ export async function getMemoryIngestionById(ingestionId: string, userId: string
               mi.completed_at as "completedAt",
               mi.last_indexed_at as "lastIndexedAt",
               mi.batch_name as "batchName",
+              mi.graph_metrics as "graphMetrics",
+              mi.graph_synced_at as "graphSyncedAt",
               COALESCE(chunk_counts.total_chunks, 0) as "totalChunks"
        FROM memory_ingestions mi
        LEFT JOIN (
@@ -641,6 +650,121 @@ export async function insertMemoryChunk(params: {
         params.metadata ?? {}
       ]
     );
+  } finally {
+    client.release();
+  }
+}
+
+export interface GraphNodeRecord {
+  id: string;
+  nodeType: GraphNodeType;
+  displayName?: string | null;
+  summary?: string | null;
+  sourceUri?: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface GraphEdgeRecord {
+  id: string;
+  edgeType: GraphEdgeType;
+  fromId: string;
+  toId: string;
+  weight?: number | null;
+  score?: number | null;
+  confidence?: number | null;
+  rank?: number | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface GraphSliceResult {
+  nodes: GraphNodeRecord[];
+  edges: GraphEdgeRecord[];
+  meta: {
+    sliceId?: string | null;
+    ingestionId?: string | null;
+    nodeCount: number;
+    edgeCount: number;
+    filters: {
+      nodeTypes?: GraphNodeType[];
+      limit: number;
+      edgeLimit: number;
+      ingestionId?: string;
+    };
+  };
+}
+
+export async function fetchGraphSlice(params: {
+  userId: string;
+  sliceId?: string;
+  nodeTypes?: GraphNodeType[];
+  limit?: number;
+  edgeLimit?: number;
+  ingestionId?: string;
+}): Promise<GraphSliceResult> {
+  const client = await pool.connect();
+  const limit = params.limit ?? 200;
+  const edgeLimit = params.edgeLimit ?? 400;
+  const nodeTypeFilter =
+    params.nodeTypes && params.nodeTypes.length > 0 ? params.nodeTypes.map((type) => type) : null;
+  const sliceFilter = params.sliceId ?? null;
+  const ingestionFilter = params.ingestionId ?? null;
+  try {
+    const nodesResult = await client.query(
+      `SELECT id,
+              node_type::text as "nodeType",
+              display_name as "displayName",
+              summary,
+              source_uri as "sourceUri",
+              metadata
+         FROM graph_nodes
+        WHERE user_id = $1
+          AND ($2::text IS NULL OR metadata->>'slice_id' = $2)
+          AND ($3::text[] IS NULL OR node_type::text = ANY($3::text[]))
+          AND ($4::uuid IS NULL OR metadata->>'ingestion_id' = $4::text)
+        ORDER BY updated_at DESC
+        LIMIT $5`,
+      [params.userId, sliceFilter, nodeTypeFilter, ingestionFilter, limit]
+    );
+    const nodes = nodesResult.rows as GraphNodeRecord[];
+    let edges: GraphEdgeRecord[] = [];
+    if (nodes.length > 0) {
+      const nodeIds = nodes.map((node) => node.id);
+      const edgesResult = await client.query(
+        `SELECT id,
+                edge_type::text as "edgeType",
+                from_id as "fromId",
+                to_id as "toId",
+                weight,
+                score,
+                confidence,
+                rank,
+                metadata
+           FROM graph_edges
+          WHERE user_id = $1
+            AND ($2::text IS NULL OR metadata->>'slice_id' = $2)
+            AND ($3::uuid IS NULL OR metadata->>'ingestion_id' = $3::text)
+            AND (from_id = ANY($4::text[]) OR to_id = ANY($4::text[]))
+          LIMIT $5`,
+        [params.userId, sliceFilter, ingestionFilter, nodeIds, edgeLimit]
+      );
+      edges = edgesResult.rows as GraphEdgeRecord[];
+    }
+    return {
+      nodes,
+      edges,
+      meta: {
+        sliceId: sliceFilter,
+        ingestionId: ingestionFilter,
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        filters: {
+          nodeTypes: params.nodeTypes,
+          limit,
+          edgeLimit,
+          ingestionId: params.ingestionId
+        }
+      }
+    };
   } finally {
     client.release();
   }

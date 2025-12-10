@@ -18,6 +18,7 @@ from ..tools import (
     profile_update_tool,
     gmail_get_thread_tool,
 )
+from ..services.url_fetch import fetch_url_content
 
 
 class ProfileUpdateInput(BaseModel):
@@ -158,6 +159,32 @@ def _format_history(history: Optional[List[dict]], max_items: int = 6) -> str:
     lines = [f"{item.get('role','user')}: {item.get('content','')}" for item in trimmed]
     return "\n".join(lines)
 
+URL_PATTERN = re.compile(r"https?://\S+")
+
+
+async def _collect_url_context(message: str, max_urls: int = 2) -> tuple[str, List[SearchSource]]:
+    urls = URL_PATTERN.findall(message or "")
+    contexts = []
+    sources: List[SearchSource] = []
+    seen = set()
+    for url in urls:
+        if url in seen:
+            continue
+        seen.add(url)
+        if len(seen) > max_urls:
+            break
+        content, title = await fetch_url_content(url)
+        if not content:
+            continue
+        display_title = title or url
+        snippet = content[:200].strip().replace("\n", " ")
+        contexts.append(f"URL: {url}\nTitle: {display_title}\nContent:\n{content[:1000]}")
+        sources.append(SearchSource(title=display_title, url=url, snippet=snippet))
+    if not contexts:
+        return "", []
+    block = "\n\n".join(contexts)
+    return block, sources
+
 
 async def run_chat_agent(
     user_id: str,
@@ -176,6 +203,11 @@ async def run_chat_agent(
             web_search_used=False
         )
 
+    url_context_block, url_sources = await _collect_url_context(message)
+    augmented_message = message
+    if url_context_block:
+        augmented_message = f"{message}\n\nURL Context:\n{url_context_block}"
+
     tools = _build_tools(user_id)
     profile_str = json.dumps(profile, indent=2) if profile else "(no profile info)"
     prompt = ChatPromptTemplate.from_messages([
@@ -188,7 +220,7 @@ async def run_chat_agent(
     executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
 
     history_str = _format_history(history)
-    result = await executor.ainvoke({"input": message, "chat_history": history_str})
+    result = await executor.ainvoke({"input": augmented_message, "chat_history": history_str})
     raw_reply = result.get("output", "")
 
     tool_calls = result.get("intermediate_steps", [])
@@ -250,10 +282,11 @@ async def run_chat_agent(
                 if not any(existing.url == entry.url for existing in sources):
                     sources.append(entry)
 
+    all_sources = sources + url_sources
     return ChatResponse(
         reply=cleaned_reply,
         used_tools=used_tools,
-        sources=sources,
+        sources=all_sources,
         web_search_used=web_used or bool(extracted)
     )
 

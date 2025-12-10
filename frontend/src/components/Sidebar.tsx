@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, ChangeEvent, DragEvent } from 'react';
+import { useEffect, useState, useRef, ChangeEvent, DragEvent, useCallback } from 'react';
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
@@ -54,6 +54,55 @@ interface BespokeStatus {
   completedAt?: string | null;
   error?: string | null;
   batchName?: string | null;
+  graphMetrics?: GraphMetrics | null;
+  graphSyncedAt?: string | null;
+}
+
+interface GraphMetrics {
+  ingestion_id?: string;
+  chunk_count?: number;
+  section_count?: number;
+  avg_chunk_tokens?: number;
+  max_chunk_tokens?: number;
+  avg_overlap_ratio?: number;
+  orphan_rate?: number;
+  [key: string]: unknown;
+}
+
+interface GraphNode {
+  id: string;
+  nodeType: string;
+  displayName?: string | null;
+  summary?: string | null;
+  sourceUri?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+interface GraphEdge {
+  id: string;
+  edgeType: string;
+  fromId: string;
+  toId: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface GraphSliceMeta {
+  sliceId?: string | null;
+  ingestionId?: string | null;
+  nodeCount: number;
+  edgeCount: number;
+  filters: {
+    nodeTypes?: string[];
+    limit: number;
+    edgeLimit: number;
+    ingestionId?: string;
+  };
+}
+
+interface GraphSliceResponse {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  meta: GraphSliceMeta;
 }
 
 export function Sidebar() {
@@ -594,6 +643,10 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
+  const [selectedIngestionId, setSelectedIngestionId] = useState<string | null>(null);
+  const [graphData, setGraphData] = useState<GraphSliceResponse | null>(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+  const [graphError, setGraphError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const allowedExtensions = ['.md'];
@@ -633,6 +686,41 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
       setHistoryLoading(false);
     }
   }
+
+  const loadGraphForIngestion = useCallback(async (ingestionId: string) => {
+    setGraphLoading(true);
+    setGraphError(null);
+    setSelectedIngestionId(ingestionId);
+    setGraphData(null);
+    try {
+      const response = await fetch(`${GATEWAY_URL}/api/memory/${ingestionId}/graph`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || 'Failed to load graph');
+      }
+      const data = await response.json();
+      setGraphData(data.graph ?? null);
+    } catch (error) {
+      console.error('Failed to load graph', error);
+      setGraphError((error as Error).message || 'Failed to load graph');
+      setGraphData(null);
+    } finally {
+      setGraphLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (historyLoading) return;
+    if (!history.length) {
+      setGraphData(null);
+      setSelectedIngestionId(null);
+      return;
+    }
+    if (!selectedIngestionId) {
+      const preferred = history.find((item) => item.status === 'uploaded') ?? history[0];
+      loadGraphForIngestion(preferred.id);
+    }
+  }, [history, historyLoading, selectedIngestionId, loadGraphForIngestion]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || []);
@@ -887,6 +975,14 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
                       <button
                         type="button"
                         className="memory-upload-btn secondary"
+                        onClick={() => loadGraphForIngestion(item.id)}
+                        disabled={graphLoading && selectedIngestionId === item.id}
+                      >
+                        {selectedIngestionId === item.id ? 'Viewing' : 'View Graph'}
+                      </button>
+                      <button
+                        type="button"
+                        className="memory-upload-btn secondary"
                         onClick={() => handleDelete(item.id)}
                         disabled={actionLoading === item.id}
                       >
@@ -897,6 +993,20 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
                 ))}
               </ul>
             )}
+          </section>
+          <section className="memory-graph-section">
+            <div className="memory-history-header">
+              <h3>Graph View</h3>
+              {selectedIngestionId && (
+                <small>Ingestion {selectedIngestionId.slice(0, 8)}…</small>
+              )}
+            </div>
+            <MemoryGraphPanel
+              graph={graphData}
+              loading={graphLoading}
+              error={graphError}
+              status={history.find((item) => item.id === selectedIngestionId) ?? null}
+            />
           </section>
         </div>
       </div>
@@ -918,6 +1028,127 @@ function MemoryProgress({ status }: { status: BespokeStatus }) {
         <div className="progress-value active" style={{ width: `${progress}%` }} />
       </div>
       <p>{label}</p>
+    </div>
+  );
+}
+
+function MemoryGraphPanel({
+  graph,
+  loading,
+  error,
+  status
+}: {
+  graph: GraphSliceResponse | null;
+  loading: boolean;
+  error: string | null;
+  status: BespokeStatus | null;
+}) {
+  if (loading) {
+    return <p className="text-muted">Loading graph…</p>;
+  }
+  if (error) {
+    return <p className="profile-error">{error}</p>;
+  }
+  if (!graph || (graph.nodes ?? []).length === 0) {
+    return <p className="text-muted">Graph not ready yet. Upload a batch and let indexing finish.</p>;
+  }
+
+  const docNode = graph.nodes.find((node) => node.nodeType === 'DOCUMENT');
+  const sections = graph.nodes.filter((node) => node.nodeType === 'SECTION');
+  const chunkNodes = graph.nodes.filter((node) => node.nodeType === 'CHUNK');
+  const metrics = status?.graphMetrics;
+
+  const metricsList = [
+    { label: 'Chunks', value: metrics?.chunk_count ?? chunkNodes.length },
+    { label: 'Sections', value: metrics?.section_count ?? sections.length },
+    {
+      label: 'Avg tokens',
+      value: metrics?.avg_chunk_tokens ? Math.round(metrics.avg_chunk_tokens) : undefined
+    },
+    {
+      label: 'Max tokens',
+      value: metrics?.max_chunk_tokens ? Math.round(metrics.max_chunk_tokens) : undefined
+    }
+  ];
+
+  return (
+    <div className="memory-graph-panel">
+      {docNode && (
+        <div className="graph-panel">
+          <div className="graph-panel-header">
+            <span className="graph-node-pill">DOCUMENT</span>
+            <strong>{docNode.displayName || docNode.id}</strong>
+          </div>
+          <p className="text-muted">{docNode.summary}</p>
+          <div className="graph-metrics-grid">
+            {metricsList.map((item) => (
+              <div key={item.label} className="graph-metric">
+                <span>{item.label}</span>
+                <strong>{item.value ?? '—'}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="graph-section-list compact">
+        {sections.map((section) => {
+          const metadata = (section.metadata ?? {}) as Record<string, unknown>;
+          const filePath =
+            typeof metadata['file_path'] === 'string'
+              ? (metadata['file_path'] as string)
+              : (section.displayName ?? 'Section');
+          const chunkCount =
+            typeof metadata['chunk_count'] === 'number'
+              ? (metadata['chunk_count'] as number)
+              : chunkNodes.filter((chunk) => {
+                  const chunkMeta = (chunk.metadata ?? {}) as Record<string, unknown>;
+                  const chunkPath =
+                    typeof chunkMeta['file_path'] === 'string'
+                      ? (chunkMeta['file_path'] as string)
+                      : chunk.sourceUri ?? '';
+                  return chunkPath === filePath;
+                }).length;
+          const sectionChunks = chunkNodes
+            .filter((chunk) => {
+              const chunkMeta = (chunk.metadata ?? {}) as Record<string, unknown>;
+              const chunkPath =
+                typeof chunkMeta['file_path'] === 'string'
+                  ? (chunkMeta['file_path'] as string)
+                  : chunk.sourceUri ?? '';
+              return chunkPath === filePath;
+            })
+            .slice(0, 2);
+          return (
+            <article key={section.id} className="graph-section-card">
+              <header>
+                <span className="graph-node-pill">SECTION</span>
+                <strong>{filePath}</strong>
+                <small>{chunkCount} chunks</small>
+              </header>
+              {sectionChunks.length === 0 ? (
+                <p className="text-muted">No chunks yet.</p>
+              ) : (
+                <ul>
+                  {sectionChunks.map((chunk) => {
+                    const chunkMeta = (chunk.metadata ?? {}) as Record<string, unknown>;
+                    const rawChunkIndex = chunkMeta['chunk_index'];
+                    const chunkIndexLabel =
+                      typeof rawChunkIndex === 'number' || typeof rawChunkIndex === 'string'
+                        ? String(rawChunkIndex)
+                        : chunk.id;
+                    return (
+                      <li key={chunk.id}>
+                        <span className="graph-node-pill subtle">Chunk #{chunkIndexLabel}</span>
+                        <p>{chunk.summary}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </article>
+          );
+        })}
+      </div>
     </div>
   );
 }

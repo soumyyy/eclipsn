@@ -138,7 +138,9 @@ CREATE TABLE IF NOT EXISTS memory_ingestions (
     error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ,
-    last_indexed_at TIMESTAMPTZ
+    last_indexed_at TIMESTAMPTZ,
+    graph_metrics JSONB,
+    graph_synced_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_memory_ingestions_user ON memory_ingestions(user_id);
 
@@ -164,3 +166,62 @@ CREATE TABLE IF NOT EXISTS memory_chunk_embeddings (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_memory_chunk_embeddings_user ON memory_chunk_embeddings(user_id);
+
+DO $$
+BEGIN
+    CREATE TYPE graph_node_type AS ENUM ('DOCUMENT', 'SECTION', 'CHUNK', 'ENTITY', 'TOPIC', 'QUERY');
+EXCEPTION WHEN duplicate_object THEN
+    NULL;
+END$$;
+
+DO $$
+BEGIN
+    CREATE TYPE graph_edge_type AS ENUM ('HAS_SECTION', 'HAS_CHUNK', 'MENTIONS', 'SIMILAR_TO', 'BELONGS_TO', 'RETRIEVED');
+EXCEPTION WHEN duplicate_object THEN
+    NULL;
+END$$;
+
+CREATE TABLE IF NOT EXISTS graph_nodes (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    node_type graph_node_type NOT NULL,
+    display_name TEXT,
+    summary TEXT,
+    source_uri TEXT,
+    source_table TEXT,
+    source_row_id UUID,
+    metadata_version TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_graph_nodes_user_type ON graph_nodes(user_id, node_type);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_document_source ON graph_nodes(user_id, source_uri)
+    WHERE source_uri IS NOT NULL AND node_type = 'DOCUMENT';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_nodes_source_row ON graph_nodes(node_type, source_row_id)
+    WHERE source_row_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS graph_edges (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    edge_type graph_edge_type NOT NULL,
+    from_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+    to_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+    weight DOUBLE PRECISION,
+    score DOUBLE PRECISION,
+    confidence DOUBLE PRECISION,
+    rank INT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_graph_edges_type ON graph_edges(edge_type);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_graph_edges_unique ON graph_edges(edge_type, from_id, to_id);
+
+CREATE TABLE IF NOT EXISTS graph_node_embeddings (
+    node_id TEXT PRIMARY KEY REFERENCES graph_nodes(id) ON DELETE CASCADE,
+    embedding VECTOR(1536) NOT NULL,
+    embedding_model TEXT NOT NULL,
+    embedding_version TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
