@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -7,6 +9,7 @@ from .config import get_settings
 from .services.memory_indexer import process_pending_chunks
 
 app = FastAPI(title="Pluto Brain")
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,4 +47,6 @@ async def trigger_memory_index():
         processed = await process_pending_chunks()
         return {"processed": processed}
     except Exception as exc:  # pragma: no cover
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        logger.exception("Memory indexing job failed")
+        message = str(exc) or repr(exc)
+        raise HTTPException(status_code=500, detail=message) from exc

@@ -54,3 +54,5 @@ poetry.lock.bak
 *.pid
 
 gateway/tmp/
+
+brain/faiss/

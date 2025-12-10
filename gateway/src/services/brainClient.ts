@@ -25,6 +25,10 @@ export async function triggerMemoryIndexing() {
   try {
     await axios.post(`${config.brainServiceUrl}/memory/index`, {});
   } catch (error) {
-    console.error('Failed to trigger memory indexing', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Failed to trigger memory indexing', error.response?.data || error.message);
+    } else {
+      console.error('Failed to trigger memory indexing', error);
+    }
   }
 }

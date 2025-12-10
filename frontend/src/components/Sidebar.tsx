@@ -570,7 +570,14 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
-  const [ingestionStatus, setIngestionStatus] = useState<{ status: string; processed: number; total: number } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [ingestionStatus, setIngestionStatus] = useState<{
+    status: string;
+    processed: number;
+    total: number;
+    updatedAt?: string;
+  } | null>(null);
   const allowedExtensions = ['.md'];
 
   useEffect(() => {
@@ -583,11 +590,14 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
           setIngestionStatus({
             status: data.ingestion.status,
             processed: data.ingestion.processedFiles,
-            total: data.ingestion.totalFiles
+            total: data.ingestion.totalFiles,
+            updatedAt: data.ingestion.completedAt ?? data.ingestion.createdAt
           });
         }
+        setStatusLoading(false);
       } catch (error) {
         console.error('Failed to load memory ingestion status', error);
+        setStatusLoading(false);
       }
     }
 
@@ -603,12 +613,14 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
     );
     setSelectedFiles(filtered);
     setUploadMessage(null);
+    setUploadError(null);
   }
 
   async function handleUpload() {
     if (!selectedFiles.length || isUploading) return;
     setIsUploading(true);
     setUploadMessage(null);
+    setUploadError(null);
     try {
       const formData = new FormData();
       selectedFiles.forEach((file) => {
@@ -629,7 +641,7 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
       setSelectedFiles([]);
     } catch (error) {
       console.error('Failed to upload bespoke memory', error);
-      setUploadMessage((error as Error).message || 'Upload failed');
+      setUploadError((error as Error).message || 'Upload failed');
     } finally {
       setIsUploading(false);
     }
@@ -651,8 +663,14 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
           <section>
             <h3>Upload Local Folder</h3>
             <p className="text-muted">
-              Drop Markdown repositories (journals, zettelkasten, docs) or select multiple `.md` files from your folder. Images/PDFs are ignored.
+              Drop Markdown repositories (journals, zettelkasten, docs) or select multiple `.md` files from your folder.
+              Images and PDFs are ignored so the pipeline stays focused on text.
             </p>
+            <ol className="memory-plan">
+              <li>Select a folder — we will read every nested Markdown file.</li>
+              <li>Upload to the gateway; chunking + embedding auto-start.</li>
+              <li>The agent references these snippets via FAISS + RRF.</li>
+            </ol>
             <label className="memory-upload">
               <input
                 type="file"
@@ -682,14 +700,28 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
                 >
                   {isUploading ? 'Uploading…' : 'Upload'}
                 </button>
+                <button
+                  type="button"
+                  className="memory-upload-btn secondary"
+                  onClick={() => setSelectedFiles([])}
+                  disabled={isUploading}
+                >
+                  Clear
+                </button>
               </div>
             )}
             {uploadMessage && <p className="text-muted">{uploadMessage}</p>}
+            {uploadError && <p className="profile-error">{uploadError}</p>}
             {ingestionStatus && (
               <p className="text-muted">
                 Latest ingestion: {ingestionStatus.status} ({ingestionStatus.processed}/{ingestionStatus.total} files)
+                {ingestionStatus.updatedAt ? ` • updated ${new Date(ingestionStatus.updatedAt).toLocaleString()}` : ''}
               </p>
             )}
+            {!ingestionStatus && !statusLoading && (
+              <p className="text-muted">No bespoke memory uploads yet.</p>
+            )}
+            {statusLoading && <p className="text-muted">Checking ingestion status…</p>}
           </section>
           <section>
             <h3>How contextualization works</h3>

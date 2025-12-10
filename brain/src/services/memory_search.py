@@ -89,11 +89,11 @@ async def _embed_query(text: str):
     settings = get_settings()
     embeddings = OpenAIEmbeddings(
         api_key=settings.openai_api_key,
-        model="text-embedding-3-small"
+        model="text-embedding-3-small",
+        encoding_name="cl100k_base"
     )
     try:
         return await embeddings.aembed_query(text)
     except AttributeError:  # pragma: no cover - fallback for sync-only impls
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, embeddings.embed_query, text)
-
