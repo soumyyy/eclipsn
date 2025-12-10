@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, ChangeEvent } from 'react';
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
@@ -9,6 +9,11 @@ interface GmailStatus {
   email?: string;
   avatarUrl?: string;
   name?: string;
+}
+
+interface OutlookStatus {
+  connected: boolean;
+  scope?: string;
 }
 
 interface ProfileNote {
@@ -39,11 +44,15 @@ interface ProfileInfo {
 
 export function Sidebar() {
   const [gmailStatus, setGmailStatus] = useState<GmailStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [gmailLoading, setGmailLoading] = useState(true);
+  const [outlookStatus, setOutlookStatus] = useState<OutlookStatus | null>(null);
+  const [outlookLoading, setOutlookLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileInfo | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [outlookDisconnecting, setOutlookDisconnecting] = useState(false);
+  const [isBespokeMemoryModalOpen, setIsBespokeMemoryModalOpen] = useState(false);
   const connectUrl = `${GATEWAY_URL}/api/gmail/connect`;
 
   useEffect(() => {
@@ -62,7 +71,7 @@ export function Sidebar() {
         console.error('Failed to load Gmail status', error);
         setGmailStatus({ connected: false });
       } finally {
-        setIsLoading(false);
+        setGmailLoading(false);
       }
     }
 
@@ -70,6 +79,30 @@ export function Sidebar() {
   }, []);
 
   useEffect(() => {
+    async function loadOutlookStatus() {
+      try {
+        const response = await fetch(`${GATEWAY_URL}/api/outlook/status`);
+        if (!response.ok) throw new Error('Failed to load Outlook status');
+        const data = await response.json();
+        setOutlookStatus({
+          connected: Boolean(data.connected),
+          scope: data.scope
+        });
+      } catch (error) {
+        console.error('Failed to load Outlook status', error);
+        setOutlookStatus({ connected: false });
+      } finally {
+        setOutlookLoading(false);
+      }
+    }
+
+    loadOutlookStatus();
+  }, []);
+
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    let stopped = false;
+
     async function loadProfile() {
       try {
         const response = await fetch(`${GATEWAY_URL}/api/profile`);
@@ -80,26 +113,64 @@ export function Sidebar() {
         console.error('Failed to load profile', error);
         setProfile(null);
       } finally {
-        setProfileLoading(false);
+        if (!stopped) {
+          setProfileLoading(false);
+        }
       }
     }
 
     loadProfile();
+    intervalId = setInterval(loadProfile, 5000);
+
+    return () => {
+      stopped = true;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, []);
 
-  async function handleDisconnect() {
-    if (disconnecting) return;
-    setDisconnecting(true);
-    try {
-      const response = await fetch(`${GATEWAY_URL}/api/gmail/disconnect`, {
-        method: 'POST'
-      });
-      if (!response.ok) throw new Error('Failed to disconnect Gmail');
-      setGmailStatus({ connected: false });
-    } catch (error) {
-      console.error('Failed to disconnect Gmail', error);
-    } finally {
-      setDisconnecting(false);
+  async function handleGmailAction() {
+    if (gmailStatus?.connected) {
+      const confirmed = window.confirm('Disconnect Gmail? You can reconnect any time.');
+      if (!confirmed) return;
+      if (disconnecting) return;
+      setDisconnecting(true);
+      try {
+        const response = await fetch(`${GATEWAY_URL}/api/gmail/disconnect`, {
+          method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to disconnect Gmail');
+        setGmailStatus({ connected: false });
+      } catch (error) {
+        console.error('Failed to disconnect Gmail', error);
+      } finally {
+        setDisconnecting(false);
+      }
+    } else {
+      window.open(connectUrl, '_blank', 'width=520,height=620');
+    }
+  }
+
+  async function handleOutlookAction() {
+    if (outlookStatus?.connected) {
+      const confirmed = window.confirm('Disconnect Outlook? You can reconnect whenever you are ready.');
+      if (!confirmed) return;
+      if (outlookDisconnecting) return;
+      setOutlookDisconnecting(true);
+      try {
+        const response = await fetch(`${GATEWAY_URL}/api/outlook/disconnect`, {
+          method: 'POST'
+        });
+        if (!response.ok) throw new Error('Failed to disconnect Outlook');
+        setOutlookStatus({ connected: false });
+      } catch (error) {
+        console.error('Failed to disconnect Outlook', error);
+      } finally {
+        setOutlookDisconnecting(false);
+      }
+    } else {
+      window.open(`${GATEWAY_URL}/api/outlook/connect`, '_blank', 'width=520,height=620');
     }
   }
 
@@ -110,10 +181,6 @@ export function Sidebar() {
         <h1>PLUTO</h1>
         <p className="text-accent">Operator Console</p>
       </div>
-      <section className="sidebar-section">
-        <h2>Tasks</h2>
-        <p>Gmail-derived tasks will materialize here.</p>
-      </section>
       <section className="sidebar-section">
         <h2>Profile</h2>
         <button
@@ -126,41 +193,62 @@ export function Sidebar() {
         </button>
       </section>
       <section className="sidebar-section">
-        <h2>Gmail</h2>
-        {isLoading ? (
-          <p className="text-muted">Checking Gmail status…</p>
-        ) : gmailStatus?.connected ? (
-          <div className="gmail-card">
-            <div className="gmail-connected">
-              <div className="gmail-avatar">
-                {gmailStatus.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={gmailStatus.avatarUrl} alt="Gmail avatar" />
-                ) : (
-                  <span>G</span>
-                )}
-              </div>
-              <div>
-                <p className="gmail-email">{gmailStatus.name ?? gmailStatus.email ?? 'Gmail account'}</p>
-              </div>
+        <h2>Connections</h2>
+        <div className="connections-grid">
+          <button
+            type="button"
+            className={`connection-button ${gmailStatus?.connected ? 'connected' : ''}`}
+            onClick={handleGmailAction}
+            disabled={gmailLoading || disconnecting}
+          >
+            <div>
+              <p className="connection-title">Gmail</p>
+              <p className="text-muted connection-subtitle">
+                {gmailLoading
+                  ? 'Checking…'
+                  : gmailStatus?.connected
+                    ? gmailStatus.name ?? gmailStatus.email ?? 'Connected'
+                    : 'Connect to ingest inbox'}
+              </p>
             </div>
-            <button
-              type="button"
-              className="gmail-button danger"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-            >
-              {disconnecting ? 'Logging out…' : 'Logout'}
-            </button>
-          </div>
-        ) : (
-          <div className="gmail-card">
-            <p className="text-muted">Link Gmail so Pluto can summarize your inbox.</p>
-            <a href={connectUrl} className="gmail-button">
-              Connect Gmail
-            </a>
-          </div>
-        )}
+            <span className="connection-action">
+              {gmailLoading ? '...' : gmailStatus?.connected ? (disconnecting ? 'Disconnecting…' : 'Disconnect') : 'Connect'}
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`connection-button ${outlookStatus?.connected ? 'connected' : ''}`}
+            onClick={handleOutlookAction}
+            disabled={outlookLoading || outlookDisconnecting}
+          >
+            <div>
+              <p className="connection-title">Outlook</p>
+              <p className="text-muted connection-subtitle">
+                {outlookLoading
+                  ? 'Checking…'
+                  : outlookStatus?.connected
+                    ? 'Connected to Microsoft Graph'
+                    : 'Connect your Outlook mail'}
+              </p>
+            </div>
+            <span className="connection-action">
+              {outlookLoading ? '...' : outlookStatus?.connected ? (outlookDisconnecting ? 'Disconnecting…' : 'Disconnect') : 'Connect'}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="connection-button memory"
+            onClick={() => setIsBespokeMemoryModalOpen(true)}
+          >
+            <div>
+              <p className="connection-title">Bespoke Memory</p>
+              <p className="text-muted connection-subtitle">
+                Upload local text repositories for RAG
+              </p>
+            </div>
+            <span className="connection-action">Open</span>
+          </button>
+        </div>
       </section>
     </div>
       {isProfileOpen && (
@@ -170,6 +258,9 @@ export function Sidebar() {
           onClose={() => setIsProfileOpen(false)}
           onProfileUpdated={(nextProfile) => setProfile(nextProfile)}
         />
+      )}
+      {isBespokeMemoryModalOpen && (
+        <BespokeMemoryModal onClose={() => setIsBespokeMemoryModalOpen(false)} />
       )}
     </>
   );
@@ -466,6 +557,85 @@ function ProfileModal({ profile, loading, onClose, onProfileUpdated }: ProfileMo
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+interface BespokeMemoryModalProps {
+  onClose: () => void;
+}
+
+function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const allowedExtensions = ['.txt', '.md', '.rtf', '.docx', '.json', '.csv'];
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    const filtered = files.filter((file) =>
+      allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
+    );
+    setSelectedFiles(filtered);
+  }
+
+  return (
+    <div className="profile-modal-overlay" onClick={onClose}>
+      <div className="profile-modal memory-modal" onClick={(evt) => evt.stopPropagation()}>
+        <div className="profile-modal-header">
+          <div>
+            <p className="profile-name">Bespoke Memory</p>
+            <p className="text-muted">Ingest local knowledge bases for bespoke RAG</p>
+          </div>
+          <button className="profile-close" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="profile-modal-body">
+          <section>
+            <h3>Upload Local Folder</h3>
+            <p className="text-muted">
+              Drop text-first repositories (journals, notes, CSVs) or select multiple files from your folder. We skip images and PDFs automatically.
+            </p>
+            <label className="memory-upload">
+              <input
+                type="file"
+                multiple
+                onChange={handleFileChange}
+                accept={allowedExtensions.join(',')}
+              />
+              <span>Select files</span>
+            </label>
+            {selectedFiles.length > 0 && (
+              <div className="memory-file-list">
+                <p className="text-muted">{selectedFiles.length} files ready for ingestion:</p>
+                <ul>
+                  {selectedFiles.slice(0, 5).map((file) => (
+                    <li key={file.name}>{file.name}</li>
+                  ))}
+                  {selectedFiles.length > 5 && <li>+ {selectedFiles.length - 5} more…</li>}
+                </ul>
+              </div>
+            )}
+          </section>
+          <section>
+            <h3>How contextualization works</h3>
+            <ol className="memory-plan">
+              <li>
+                <strong>Chunking:</strong> we split text files into semantic chunks, skipping media/PDFs to keep signal high.
+              </li>
+              <li>
+                <strong>Embeddings + FAISS:</strong> each chunk is embedded and persisted in a FAISS index per collection.
+              </li>
+              <li>
+                <strong>RRF fusion:</strong> during queries we pull top results from Gmail, Outlook, and Bespoke Memory, then
+                blend them with Reciprocal Rank Fusion so the agent always sees the most relevant snippets.
+              </li>
+            </ol>
+            <p className="text-muted">
+              Additional ingestion sources (GitHub repos, cloud drives) will plug into the same pipeline.
+            </p>
+          </section>
+        </div>
       </div>
     </div>
   );

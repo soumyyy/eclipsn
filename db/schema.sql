@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS gmail_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_gmail_tokens_user_id ON gmail_tokens(user_id);
 
+CREATE TABLE IF NOT EXISTS outlook_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL UNIQUE REFERENCES users(id),
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    expiry TIMESTAMPTZ NOT NULL,
+    tenant_id TEXT,
+    scope TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_outlook_tokens_user_id ON outlook_tokens(user_id);
+
 CREATE TABLE IF NOT EXISTS gmail_threads (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id),
@@ -104,3 +116,30 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_thread_id ON tasks(thread_id);
+
+CREATE TABLE IF NOT EXISTS memory_ingestions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    source TEXT NOT NULL,
+    total_files INT DEFAULT 0,
+    processed_files INT DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_memory_ingestions_user ON memory_ingestions(user_id);
+
+CREATE TABLE IF NOT EXISTS memory_chunks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    ingestion_id UUID NOT NULL REFERENCES memory_ingestions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id),
+    source TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    chunk_index INT NOT NULL,
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_memory_chunks_ingestion ON memory_chunks(ingestion_id);
+CREATE INDEX IF NOT EXISTS idx_memory_chunks_user ON memory_chunks(user_id);

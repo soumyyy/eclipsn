@@ -65,6 +65,63 @@ export async function deleteGmailTokens(userId: string) {
   }
 }
 
+export async function saveOutlookTokens(params: {
+  userId: string;
+  accessToken: string;
+  refreshToken: string;
+  expiry: Date;
+  tenantId?: string;
+  scope?: string;
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO outlook_tokens (id, user_id, access_token, refresh_token, expiry, tenant_id, scope)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+       ON CONFLICT (user_id)
+       DO UPDATE SET access_token = EXCLUDED.access_token,
+                     refresh_token = EXCLUDED.refresh_token,
+                     expiry = EXCLUDED.expiry,
+                     tenant_id = EXCLUDED.tenant_id,
+                     scope = EXCLUDED.scope`,
+      [params.userId, params.accessToken, params.refreshToken, params.expiry, params.tenantId ?? null, params.scope ?? null]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function getOutlookTokens(userId: string) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT access_token as "accessToken",
+              refresh_token as "refreshToken",
+              expiry,
+              tenant_id as "tenantId",
+              scope
+       FROM outlook_tokens
+       WHERE user_id = $1`,
+      [userId]
+    );
+    if (result.rowCount === 0) {
+      return null;
+    }
+    return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteOutlookTokens(userId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query(`DELETE FROM outlook_tokens WHERE user_id = $1`, [userId]);
+  } finally {
+    client.release();
+  }
+}
+
 export interface GmailThreadRecord {
   threadId: string;
   subject: string;
@@ -188,21 +245,6 @@ export async function insertMessage(params: {
 
 export function getPool() {
   return pool;
-}
-
-export async function removeExpiredGmailThreads(userId: string) {
-  const client = await pool.connect();
-  try {
-    await client.query(
-      `DELETE FROM gmail_threads
-       WHERE user_id = $1
-         AND expires_at IS NOT NULL
-         AND expires_at < NOW()`,
-      [userId]
-    );
-  } finally {
-    client.release();
-  }
 }
 
 export async function getUserProfile(userId: string) {

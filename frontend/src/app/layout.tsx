@@ -3,7 +3,10 @@ import type { ReactNode } from 'react';
 
 export const metadata = {
   title: 'Pluto',
-  description: 'Personal agent for long-term knowledge and Gmail'
+  description: 'Personal agent for long-term knowledge and Gmail',
+  icons: {
+    icon: '/plutologo.png'
+  }
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -12,6 +12,9 @@ export const config = {
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
+  outlookClientId: process.env.OUTLOOK_CLIENT_ID || '',
+  outlookClientSecret: process.env.OUTLOOK_CLIENT_SECRET || '',
+  outlookRedirectUri: process.env.OUTLOOK_REDIRECT_URI || '',
   sessionSecret: process.env.SESSION_SECRET || 'dev-secret',
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000'
 };

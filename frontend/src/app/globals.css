@@ -549,6 +549,103 @@ body {
   color: var(--text-primary);
 }
 
+.connections-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.connection-button {
+  width: 100%;
+  border: 1px solid rgba(57, 255, 20, 0.3);
+  background: rgba(5, 5, 5, 0.85);
+  color: var(--text-primary);
+  padding: 12px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  text-align: left;
+  cursor: pointer;
+  transition: border 0.2s ease, box-shadow 0.2s ease;
+}
+
+.connection-button.connected {
+  border-color: rgba(57, 255, 20, 0.6);
+  box-shadow: 0 0 12px rgba(57, 255, 20, 0.2);
+}
+
+.connection-button.memory {
+  border-style: dashed;
+}
+
+.connection-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.connection-title {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.connection-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.connection-action {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--neon);
+}
+
+.memory-modal input[type="file"] {
+  display: none;
+}
+
+.memory-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed rgba(57, 255, 20, 0.4);
+  padding: 12px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 11px;
+  color: var(--neon);
+}
+
+.memory-file-list {
+  margin-top: 12px;
+  border: 1px solid rgba(57, 255, 20, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: rgba(5, 5, 5, 0.8);
+}
+
+.memory-file-list ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.memory-plan {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.memory-plan li {
+  margin-bottom: 8px;
+}
+
 .profile-name {
   margin: 0;
   font-size: 15px;

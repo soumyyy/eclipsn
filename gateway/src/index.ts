@@ -5,6 +5,7 @@ import { config } from './config';
 import chatRouter from './routes/chat';
 import gmailRouter from './routes/gmail';
 import profileRouter from './routes/profile';
+import outlookRouter from './routes/outlook';
 import { scheduleGmailJobs } from './jobs/gmailJobs';
 // import { graphqlHTTP } from 'express-graphql';
 // import { schema } from './graphql/schema';
@@ -22,6 +23,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/chat', chatRouter);
 app.use('/api/gmail', gmailRouter);
+app.use('/api/outlook', outlookRouter);
 app.use('/api/profile', profileRouter);
 
 // GraphQL stub for future dashboards
