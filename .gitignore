@@ -52,3 +52,5 @@ poetry.lock.bak
 # Misc
 *.sqlite3
 *.pid
+
+gateway/tmp/

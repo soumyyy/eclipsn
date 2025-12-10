@@ -10,6 +10,7 @@ import {
   insertMemoryChunk,
   updateMemoryIngestion
 } from '../services/db';
+import { triggerMemoryIndexing } from '../services/brainClient';
 
 const router = Router();
 const upload = multer({
@@ -108,6 +109,7 @@ async function processMemoryIngestion(files: Express.Multer.File[], relativePath
       }
     }
     await updateMemoryIngestion({ ingestionId, status: 'completed', processedFiles: processed });
+    await triggerMemoryIndexing();
   } catch (error) {
     await updateMemoryIngestion({
       ingestionId,

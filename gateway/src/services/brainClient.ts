@@ -20,3 +20,11 @@ export async function sendChat(payload: ChatPayload) {
 
   return response.data;
 }
+
+export async function triggerMemoryIndexing() {
+  try {
+    await axios.post(`${config.brainServiceUrl}/memory/index`, {});
+  } catch (error) {
+    console.error('Failed to trigger memory indexing', error);
+  }
+}
