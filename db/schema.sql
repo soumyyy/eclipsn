@@ -123,10 +123,13 @@ CREATE TABLE IF NOT EXISTS memory_ingestions (
     source TEXT NOT NULL,
     total_files INT DEFAULT 0,
     processed_files INT DEFAULT 0,
+    chunked_files INT DEFAULT 0,
+    indexed_chunks INT DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'pending',
     error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    completed_at TIMESTAMPTZ
+    completed_at TIMESTAMPTZ,
+    last_indexed_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_memory_ingestions_user ON memory_ingestions(user_id);
 

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import axios from 'axios';
 import { config } from '../config';
 
 interface ChatPayload {
@@ -21,9 +22,10 @@ export async function sendChat(payload: ChatPayload) {
   return response.data;
 }
 
-export async function triggerMemoryIndexing() {
+export async function triggerMemoryIndexing(userId?: string) {
   try {
-    await axios.post(`${config.brainServiceUrl}/memory/index`, {});
+    const options = userId ? { params: { user_id: userId } } : undefined;
+    await axios.post(`${config.brainServiceUrl}/memory/index`, {}, options);
   } catch (error) {
     if (axios.isAxiosError(error)) {
       console.error('Failed to trigger memory indexing', error.response?.data || error.message);

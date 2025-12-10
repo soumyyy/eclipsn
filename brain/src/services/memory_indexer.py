@@ -21,12 +21,13 @@ class MemoryChunkRow:
     source: str
     file_path: str
     content: str
+    ingestion_id: str
 
 
 async def fetch_pending_chunks(limit: int = 50) -> List[MemoryChunkRow]:
     pool = await get_pool()
     query = """
-        SELECT mc.id, mc.user_id, mc.source, mc.file_path, mc.content
+        SELECT mc.id, mc.user_id, mc.source, mc.file_path, mc.content, mc.ingestion_id
         FROM memory_chunks mc
         LEFT JOIN memory_chunk_embeddings me ON me.chunk_id = mc.id
         WHERE me.chunk_id IS NULL
@@ -42,6 +43,7 @@ async def fetch_pending_chunks(limit: int = 50) -> List[MemoryChunkRow]:
             source=row["source"],
             file_path=row["file_path"],
             content=row["content"],
+            ingestion_id=str(row["ingestion_id"])
         )
         for row in rows
     ]
@@ -118,7 +120,8 @@ async def process_pending_chunks(batch_size: int = 50) -> int:
 
     embeddings = OpenAIEmbeddings(
         api_key=settings.openai_api_key,
-        model="text-embedding-3-small"
+        model="text-embedding-3-small",
+        show_progress_bar=False
     )
 
     processed_total = 0
@@ -130,9 +133,15 @@ async def process_pending_chunks(batch_size: int = 50) -> int:
             break
         if not rows:
             break
+        ingestion_ids = {row.ingestion_id for row in rows}
+        await mark_ingestions_indexing(ingestion_ids)
         texts = [row.content for row in rows]
         vectors = await _embed_documents(embeddings, texts)
         await store_embeddings(rows, vectors)
+        counts: dict[str, int] = {}
+        for row in rows:
+            counts[row.ingestion_id] = counts.get(row.ingestion_id, 0) + 1
+        await update_index_counts(counts)
         await rebuild_indices_for_users(row.user_id for row in rows)
         processed_total += len(rows)
         logger.info("Indexed %d bespoke memory chunks (total=%d)", len(rows), processed_total)
@@ -140,8 +149,68 @@ async def process_pending_chunks(batch_size: int = 50) -> int:
 
 
 async def _embed_documents(embedding_client: OpenAIEmbeddings, texts: Sequence[str]) -> List[List[float]]:
-    try:
-        return await embedding_client.aembed_documents(texts)
-    except AttributeError:  # pragma: no cover - fallback for sync-only implementations
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, embedding_client.embed_documents, list(texts))
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, embedding_client.embed_documents, list(texts))
+
+
+async def mark_ingestions_indexing(ingestion_ids: Iterable[str]) -> None:
+    ids = list({ingestion_id for ingestion_id in ingestion_ids if ingestion_id})
+    if not ids:
+        return
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            for ingestion_id in ids:
+                await conn.execute(
+                    """
+                    UPDATE memory_ingestions
+                    SET status = CASE
+                        WHEN status IN ('uploaded', 'failed') THEN status
+                        ELSE 'indexing'
+                    END
+                    WHERE id = $1
+                    """,
+                    ingestion_id
+                )
+
+
+async def update_index_counts(counts: dict[str, int]) -> None:
+    if not counts:
+        return
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            for ingestion_id, increment in counts.items():
+                await conn.execute(
+                    """
+                    UPDATE memory_ingestions
+                    SET indexed_chunks = COALESCE(indexed_chunks, 0) + $2,
+                        status = CASE
+                            WHEN status IN ('uploaded', 'failed') THEN status
+                            ELSE 'indexing'
+                        END,
+                        last_indexed_at = NOW()
+                    WHERE id = $1
+                    """,
+                    ingestion_id,
+                    increment
+                )
+            remaining = await conn.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM memory_chunks mc
+                LEFT JOIN memory_chunk_embeddings me ON me.chunk_id = mc.id
+                WHERE mc.ingestion_id = $1 AND me.chunk_id IS NULL
+                """,
+                ingestion_id
+            )
+            if remaining == 0:
+                await conn.execute(
+                    """
+                    UPDATE memory_ingestions
+                    SET status = 'uploaded',
+                        completed_at = NOW()
+                    WHERE id = $1
+                    """,
+                    ingestion_id
+                )

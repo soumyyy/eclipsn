@@ -648,6 +648,10 @@ body {
   cursor: pointer;
 }
 
+.memory-upload-btn.primary {
+  background: rgba(57, 255, 20, 0.2);
+}
+
 .memory-upload-btn.secondary {
   margin-left: 8px;
   border-color: rgba(158, 252, 155, 0.4);
@@ -660,6 +664,22 @@ body {
   cursor: not-allowed;
 }
 
+.memory-upload-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.memory-upload-progress .progress-track {
+  width: 100%;
+}
+
+.memory-upload-progress .progress-value {
+  animation: hero-pulse 1.4s infinite ease-in-out;
+}
+
 .memory-plan {
   margin: 0;
   padding-left: 18px;
@@ -669,6 +689,131 @@ body {
 
 .memory-plan li {
   margin-bottom: 8px;
+}
+
+.memory-dropzone {
+  border: 1px dashed rgba(57, 255, 20, 0.4);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  margin-bottom: 12px;
+  transition: border 0.2s ease, background 0.2s ease;
+  cursor: pointer;
+}
+
+.memory-dropzone input {
+  display: none;
+}
+
+.memory-dropzone.active {
+  border-color: rgba(57, 255, 20, 0.8);
+  background: rgba(57, 255, 20, 0.05);
+}
+
+.memory-dropzone p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.memory-confirmation {
+  text-align: left;
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.memory-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.memory-progress {
+  border: 1px solid rgba(57, 255, 20, 0.25);
+  border-radius: 10px;
+  padding: 14px;
+  background: rgba(5, 5, 5, 0.85);
+  margin-top: 12px;
+}
+
+.memory-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-group {
+  margin-top: 10px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.progress-track {
+  height: 6px;
+  background: rgba(57, 255, 20, 0.15);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.progress-value {
+  height: 100%;
+  background: var(--neon);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.memory-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.memory-history-item {
+  border: 1px solid rgba(57, 255, 20, 0.15);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(5, 5, 5, 0.8);
+}
+
+.memory-history-title {
+  margin: 0;
+  font-size: 13px;
+}
+
+.memory-history-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.memory-status-chip {
+  border: 1px solid rgba(57, 255, 20, 0.3);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
 }
 
 .profile-name {
@@ -723,4 +868,18 @@ body {
     opacity: 1;
     transform: scale(1);
   }
+}
+.memory-file-queue {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.memory-confirm {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

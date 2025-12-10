@@ -332,26 +332,31 @@ export async function upsertUserProfile(userId: string, data: Record<string, unk
     client.release();
   }
 }
-export interface MemoryIngestion {
+export interface MemoryIngestionRecord {
   id: string;
   userId: string;
   source: string;
   totalFiles: number;
   processedFiles: number;
+  chunkedFiles: number;
+  indexedChunks: number;
+  totalChunks: number;
   status: string;
   error?: string | null;
   createdAt: Date;
   completedAt?: Date | null;
+  lastIndexedAt?: Date | null;
+  batchName?: string | null;
 }
 
-export async function createMemoryIngestion(params: { userId: string; source: string; totalFiles: number }): Promise<string> {
+export async function createMemoryIngestion(params: { userId: string; source: string; totalFiles: number; batchName?: string }): Promise<string> {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `INSERT INTO memory_ingestions (id, user_id, source, total_files)
-       VALUES (gen_random_uuid(), $1, $2, $3)
+      `INSERT INTO memory_ingestions (id, user_id, source, total_files, batch_name)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4)
        RETURNING id`,
-      [params.userId, params.source, params.totalFiles]
+      [params.userId, params.source, params.totalFiles, params.batchName ?? null]
     );
     return result.rows[0].id as string;
   } finally {
@@ -362,46 +367,173 @@ export async function createMemoryIngestion(params: { userId: string; source: st
 export async function updateMemoryIngestion(params: {
   ingestionId: string;
   processedFiles?: number;
+  chunkedFiles?: number;
+  indexedChunks?: number;
   status?: string;
   error?: string | null;
+  lastIndexedAt?: Date | null;
 }) {
   const client = await pool.connect();
   try {
     await client.query(
       `UPDATE memory_ingestions
        SET processed_files = COALESCE($2, processed_files),
-           status = COALESCE($3, status),
-           error = COALESCE($4, error),
-           completed_at = CASE WHEN $3 IN ('completed', 'failed') THEN NOW() ELSE completed_at END
+           chunked_files = COALESCE($3, chunked_files),
+           indexed_chunks = COALESCE($4, indexed_chunks),
+           status = COALESCE($5, status),
+           error = COALESCE($6, error),
+           last_indexed_at = COALESCE($7, last_indexed_at),
+           completed_at = CASE WHEN $5 IN ('uploaded', 'failed') THEN NOW() ELSE completed_at END
        WHERE id = $1`,
-      [params.ingestionId, params.processedFiles ?? null, params.status ?? null, params.error ?? null]
+      [
+        params.ingestionId,
+        params.processedFiles ?? null,
+        params.chunkedFiles ?? null,
+        params.indexedChunks ?? null,
+        params.status ?? null,
+        params.error ?? null,
+        params.lastIndexedAt ?? null
+      ]
     );
   } finally {
     client.release();
   }
 }
 
-export async function getLatestMemoryIngestion(userId: string, source: string): Promise<MemoryIngestion | null> {
+export async function getLatestMemoryIngestion(userId: string, source: string): Promise<MemoryIngestionRecord | null> {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT id,
-              user_id as "userId",
-              source,
-              total_files as "totalFiles",
-              processed_files as "processedFiles",
-              status,
-              error,
-              created_at as "createdAt",
-              completed_at as "completedAt"
-       FROM memory_ingestions
-       WHERE user_id = $1 AND source = $2
-       ORDER BY created_at DESC
+      `SELECT mi.id,
+              mi.user_id as "userId",
+              mi.source,
+              mi.total_files as "totalFiles",
+              mi.processed_files as "processedFiles",
+              mi.chunked_files as "chunkedFiles",
+              mi.indexed_chunks as "indexedChunks",
+              mi.status,
+              mi.error,
+              mi.created_at as "createdAt",
+              mi.completed_at as "completedAt",
+              mi.last_indexed_at as "lastIndexedAt",
+              mi.batch_name as "batchName",
+              COALESCE(chunk_counts.total_chunks, 0) as "totalChunks"
+       FROM memory_ingestions mi
+       LEFT JOIN (
+         SELECT ingestion_id, COUNT(*) as total_chunks
+         FROM memory_chunks
+         GROUP BY ingestion_id
+       ) as chunk_counts ON chunk_counts.ingestion_id = mi.id
+       WHERE mi.user_id = $1 AND mi.source = $2
+       ORDER BY mi.created_at DESC
        LIMIT 1`,
       [userId, source]
     );
     if (result.rowCount === 0) return null;
-    return result.rows[0] as MemoryIngestion;
+    return result.rows[0] as MemoryIngestionRecord;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listMemoryIngestions(userId: string, limit = 10): Promise<MemoryIngestionRecord[]> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT mi.id,
+              mi.user_id as "userId",
+              mi.source,
+              mi.total_files as "totalFiles",
+              mi.processed_files as "processedFiles",
+              mi.chunked_files as "chunkedFiles",
+              mi.indexed_chunks as "indexedChunks",
+              mi.status,
+              mi.error,
+              mi.created_at as "createdAt",
+              mi.completed_at as "completedAt",
+              mi.last_indexed_at as "lastIndexedAt",
+              mi.batch_name as "batchName",
+              COALESCE(chunk_counts.total_chunks, 0) as "totalChunks"
+       FROM memory_ingestions mi
+       LEFT JOIN (
+         SELECT ingestion_id, COUNT(*) as total_chunks
+         FROM memory_chunks
+         GROUP BY ingestion_id
+       ) as chunk_counts ON chunk_counts.ingestion_id = mi.id
+       WHERE mi.user_id = $1
+       ORDER BY mi.created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows as MemoryIngestionRecord[];
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteMemoryIngestion(ingestionId: string, userId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query(`DELETE FROM memory_ingestions WHERE id = $1 AND user_id = $2`, [ingestionId, userId]);
+  } finally {
+    client.release();
+  }
+}
+
+export async function resetIngestionEmbeddings(ingestionId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `DELETE FROM memory_chunk_embeddings
+       WHERE chunk_id IN (
+         SELECT id FROM memory_chunks WHERE ingestion_id = $1
+       )`,
+      [ingestionId]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function getMemoryIngestionById(ingestionId: string, userId: string): Promise<MemoryIngestionRecord | null> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT mi.id,
+              mi.user_id as "userId",
+              mi.source,
+              mi.total_files as "totalFiles",
+              mi.processed_files as "processedFiles",
+              mi.chunked_files as "chunkedFiles",
+              mi.indexed_chunks as "indexedChunks",
+              mi.status,
+              mi.error,
+              mi.created_at as "createdAt",
+              mi.completed_at as "completedAt",
+              mi.last_indexed_at as "lastIndexedAt",
+              mi.batch_name as "batchName",
+              COALESCE(chunk_counts.total_chunks, 0) as "totalChunks"
+       FROM memory_ingestions mi
+       LEFT JOIN (
+         SELECT ingestion_id, COUNT(*) as total_chunks
+         FROM memory_chunks
+         GROUP BY ingestion_id
+       ) as chunk_counts ON chunk_counts.ingestion_id = mi.id
+       WHERE mi.id = $1 AND mi.user_id = $2
+       LIMIT 1`,
+      [ingestionId, userId]
+    );
+    if (result.rowCount === 0) return null;
+    return result.rows[0] as MemoryIngestionRecord;
+  } finally {
+    client.release();
+  }
+}
+
+export async function clearAllMemoryIngestions(userId: string, source: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('DELETE FROM memory_ingestions WHERE user_id = $1 AND source = $2', [userId, source]);
   } finally {
     client.release();
   }

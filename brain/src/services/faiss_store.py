@@ -45,6 +45,7 @@ def write_faiss_index(user_id: str, records: Iterable[EmbeddingRecord]) -> None:
     if not records:
         logger.info("No embeddings for user %s; removing stale index if any", user_id)
         _cleanup_index(user_id)
+        _invalidate_index_cache(user_id)
         return
 
     vectors = np.array([rec.vector for rec in records], dtype="float32")
@@ -72,6 +73,7 @@ def write_faiss_index(user_id: str, records: Iterable[EmbeddingRecord]) -> None:
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False)
 
+    _invalidate_index_cache(user_id)
     logger.info("Updated FAISS index for user %s with %d vectors", user_id, len(records))
 
 
@@ -82,3 +84,14 @@ def _cleanup_index(user_id: str) -> None:
     for path in (index_path, meta_path):
         if path.exists():
             os.remove(path)
+    # remove directory if empty
+    if index_dir.exists() and not any(index_dir.iterdir()):
+        index_dir.rmdir()
+
+
+def _invalidate_index_cache(user_id: str) -> None:
+    try:
+        from .memory_search import _load_index  # pylint: disable=import-outside-toplevel
+        _load_index.cache_clear()  # type: ignore[attr-defined]
+    except Exception:
+        pass

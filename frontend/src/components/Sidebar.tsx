@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, ChangeEvent } from 'react';
+import { useEffect, useState, useRef, ChangeEvent, DragEvent } from 'react';
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
@@ -40,6 +40,20 @@ interface ProfileInfo {
     previousValues?: Record<string, ProfileHistoryEntry[]>;
     [key: string]: unknown;
   };
+}
+
+interface BespokeStatus {
+  id: string;
+  status: string;
+  statusLabel: string;
+  totalFiles: number;
+  chunkedFiles: number;
+  indexedChunks: number;
+  totalChunks: number;
+  createdAt: string;
+  completedAt?: string | null;
+  error?: string | null;
+  batchName?: string | null;
 }
 
 export function Sidebar() {
@@ -248,6 +262,7 @@ export function Sidebar() {
             </div>
             <span className="connection-action">Open</span>
           </button>
+
         </div>
       </section>
     </div>
@@ -566,64 +581,107 @@ interface BespokeMemoryModalProps {
   onClose: () => void;
 }
 
+type UploadStage = 'idle' | 'confirm' | 'uploading';
+
 function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileQueue, setFileQueue] = useState<{ name: string; size: number }[]>([]);
+  const [uploadStage, setUploadStage] = useState<UploadStage>('idle');
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [statusData, setStatusData] = useState<BespokeStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
-  const [ingestionStatus, setIngestionStatus] = useState<{
-    status: string;
-    processed: number;
-    total: number;
-    updatedAt?: string;
-  } | null>(null);
+  const [history, setHistory] = useState<BespokeStatus[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [clearingAll, setClearingAll] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const allowedExtensions = ['.md'];
 
   useEffect(() => {
-    async function fetchStatus() {
-      try {
-        const response = await fetch(`${GATEWAY_URL}/api/memory/status`);
-        if (!response.ok) return;
-        const data = await response.json();
-        if (data.ingestion) {
-          setIngestionStatus({
-            status: data.ingestion.status,
-            processed: data.ingestion.processedFiles,
-            total: data.ingestion.totalFiles,
-            updatedAt: data.ingestion.completedAt ?? data.ingestion.createdAt
-          });
-        }
-        setStatusLoading(false);
-      } catch (error) {
-        console.error('Failed to load memory ingestion status', error);
-        setStatusLoading(false);
-      }
-    }
-
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
+    loadStatus();
+    loadHistory();
+    const interval = setInterval(() => {
+      loadStatus();
+      loadHistory();
+    }, 6000);
     return () => clearInterval(interval);
   }, []);
 
+  async function loadStatus() {
+    try {
+      const response = await fetch(`${GATEWAY_URL}/api/memory/status`);
+      if (!response.ok) throw new Error('Failed to load status');
+      const data = await response.json();
+      setStatusData(data.ingestion ?? null);
+    } catch (error) {
+      console.error('Failed to load memory status', error);
+    } finally {
+      setStatusLoading(false);
+    }
+  }
+
+  async function loadHistory(limit = 6) {
+    try {
+      const response = await fetch(`${GATEWAY_URL}/api/memory/history?limit=${limit}`);
+      if (!response.ok) throw new Error('Failed to load history');
+      const data = await response.json();
+      setHistory(data.history ?? []);
+    } catch (error) {
+      console.error('Failed to load ingestion history', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || []);
+    const validFiles = files.filter((file) =>
+      allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
+    );
+    const queue = validFiles.map((file) => ({
+      name: file.webkitRelativePath || file.name,
+      size: file.size
+    }));
+    setFileQueue(queue);
+    setUploadError(null);
+    setUploadStage(queue.length ? 'confirm' : 'idle');
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragActive(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragActive(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragActive(false);
+    const files = Array.from(event.dataTransfer.files || []);
     const filtered = files.filter((file) =>
       allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
     );
-    setSelectedFiles(filtered);
-    setUploadMessage(null);
+    const queue = filtered.map((file) => ({
+      name: file.webkitRelativePath || file.name,
+      size: file.size
+    }));
+    setFileQueue(queue);
     setUploadError(null);
+    setUploadStage(queue.length ? 'confirm' : 'idle');
   }
 
   async function handleUpload() {
-    if (!selectedFiles.length || isUploading) return;
+    if (!fileQueue.length || isUploading || !fileInputRef.current?.files) return;
+    setUploadStage('uploading');
     setIsUploading(true);
-    setUploadMessage(null);
     setUploadError(null);
     try {
       const formData = new FormData();
-      selectedFiles.forEach((file) => {
+      Array.from(fileInputRef.current.files).forEach((file) => {
         formData.append('files', file, file.name);
         const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
         formData.append('paths', relativePath || file.name);
@@ -636,14 +694,70 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Upload failed');
       }
-      const data = await response.json();
-      setUploadMessage(`Upload started. Ingestion ID: ${data.ingestionId}`);
-      setSelectedFiles([]);
+      await loadStatus();
+      await loadHistory();
+      setFileQueue([]);
+      setUploadStage('idle');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (error) {
       console.error('Failed to upload bespoke memory', error);
       setUploadError((error as Error).message || 'Upload failed');
     } finally {
       setIsUploading(false);
+    }
+  }
+
+  async function handleReindex(ingestionId: string) {
+    setActionLoading(ingestionId);
+    try {
+      const response = await fetch(`${GATEWAY_URL}/api/memory/${ingestionId}/reindex`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Failed to queue re-index');
+      await loadStatus();
+      await loadHistory();
+    } catch (error) {
+      console.error('Failed to reindex ingestion', error);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDelete(ingestionId: string) {
+    setActionLoading(ingestionId);
+    try {
+      const response = await fetch(`${GATEWAY_URL}/api/memory/${ingestionId}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to delete ingestion');
+      await loadStatus();
+      await loadHistory();
+    } catch (error) {
+      console.error('Failed to delete ingestion', error);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleClearAll() {
+    if (clearingAll) return;
+    setClearingAll(true);
+    try {
+      const response = await fetch(`${GATEWAY_URL}/api/memory`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to clear bespoke memories');
+      await loadStatus();
+      await loadHistory();
+      setFileQueue([]);
+      setUploadStage('idle');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (error) {
+      console.error('Failed to clear bespoke memories', error);
+    } finally {
+      setClearingAll(false);
     }
   }
 
@@ -653,7 +767,6 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
         <div className="profile-modal-header">
           <div>
             <p className="profile-name">Bespoke Memory</p>
-            <p className="text-muted">Ingest local knowledge bases for bespoke RAG</p>
           </div>
           <button className="profile-close" type="button" onClick={onClose}>
             Close
@@ -662,87 +775,149 @@ function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
         <div className="profile-modal-body">
           <section>
             <h3>Upload Local Folder</h3>
-            <p className="text-muted">
-              Drop Markdown repositories (journals, zettelkasten, docs) or select multiple `.md` files from your folder.
-              Images and PDFs are ignored so the pipeline stays focused on text.
-            </p>
-            <ol className="memory-plan">
-              <li>Select a folder — we will read every nested Markdown file.</li>
-              <li>Upload to the gateway; chunking + embedding auto-start.</li>
-              <li>The agent references these snippets via FAISS + RRF.</li>
-            </ol>
-            <label className="memory-upload">
+            <div className={`memory-dropzone ${dragActive ? 'active' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
               <input
                 type="file"
                 multiple
+                ref={fileInputRef}
+                // allow folder selection when supported
                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore webkitdirectory is valid on Chromium
+                // @ts-ignore
                 webkitdirectory="true"
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                directory="true"
                 onChange={handleFileChange}
                 accept={allowedExtensions.join(',')}
               />
-              <span>Select files</span>
-            </label>
-            {selectedFiles.length > 0 && (
-              <div className="memory-file-list">
-                <p className="text-muted">{selectedFiles.length} files ready for ingestion:</p>
-                <ul>
-                  {selectedFiles.slice(0, 5).map((file) => (
-                    <li key={file.name}>{file.name}</li>
-                  ))}
-                  {selectedFiles.length > 5 && <li>+ {selectedFiles.length - 5} more…</li>}
-                </ul>
-                <button
-                  type="button"
-                  className="memory-upload-btn"
-                  onClick={handleUpload}
-                  disabled={isUploading}
-                >
-                  {isUploading ? 'Uploading…' : 'Upload'}
-                </button>
+              {uploadStage === 'confirm' && fileQueue.length > 0 && (
+                <div className="memory-confirmation">
+                  <p>Upload {fileQueue.length} Markdown file{fileQueue.length === 1 ? '' : 's'}?</p>
+                  <ul className="memory-file-queue">
+                    {fileQueue.slice(0, 6).map((file) => (
+                      <li key={file.name}>{file.name}</li>
+                    ))}
+                    {fileQueue.length > 6 && <li>+ {fileQueue.length - 6} more</li>}
+                  </ul>
+                  <div className="memory-actions">
+                    <button type="button" className="memory-upload-btn primary" onClick={handleUpload} disabled={isUploading}>
+                      {isUploading ? 'Uploading…' : 'Confirm'}
+                    </button>
+                    <button
+                      type="button"
+                      className="memory-upload-btn secondary"
+                      onClick={() => {
+                        setFileQueue([]);
+                        setUploadStage('idle');
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      disabled={isUploading}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              {uploadStage === 'uploading' && (
+                <div className="memory-upload-progress">
+                  <div className="progress-track">
+                    <div className="progress-value active" style={{ width: '60%' }} />
+                  </div>
+                  <p>Uploading…</p>
+                </div>
+              )}
+              {uploadStage !== 'confirm' && uploadStage !== 'uploading' && statusData && statusData.status !== 'uploaded' && statusData.status !== 'failed' && (
+                <MemoryProgress status={statusData} />
+              )}
+              {uploadStage !== 'uploading' && statusData && statusData.status === 'failed' && (
+                <p className="profile-error">{statusData.error || 'Ingestion failed'}</p>
+              )}
+              {uploadStage === 'idle' && statusLoading && (
+                <p className="text-muted">Checking status…</p>
+              )}
+              {uploadStage === 'idle' && !statusLoading && (!statusData || statusData.status === 'uploaded' || statusData.status === 'failed') && (
+                <>
+                  <p>Drop Markdown files or click Upload.</p>
+                  <button type="button" className="memory-upload-btn primary" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                    Upload
+                  </button>
+                </>
+              )}
+            </div>
+            {uploadError && <p className="profile-error">{uploadError}</p>}
+          </section>
+          <section>
+            <div className="memory-history-header">
+              <h3>History</h3>
+              {history.length > 0 && (
                 <button
                   type="button"
                   className="memory-upload-btn secondary"
-                  onClick={() => setSelectedFiles([])}
-                  disabled={isUploading}
+                  onClick={handleClearAll}
+                  disabled={clearingAll}
                 >
-                  Clear
+                  {clearingAll ? 'Clearing…' : 'Clear All'}
                 </button>
-              </div>
+              )}
+            </div>
+            {historyLoading ? (
+              <p className="text-muted">Loading history…</p>
+            ) : history.length === 0 ? (
+              <p className="text-muted">No uploads yet.</p>
+            ) : (
+              <ul className="memory-history-list">
+                {history.map((item) => (
+                  <li key={item.id} className="memory-history-item">
+                    <div>
+                      <p className="memory-history-title">{item.batchName || `${item.totalFiles} file${item.totalFiles === 1 ? '' : 's'}`}</p>
+                      <small>{item.statusLabel} · {new Date(item.createdAt).toLocaleString()}</small>
+                    </div>
+                    <div className="memory-history-actions">
+                      {/* Re-index button commented out per request */}
+                      {/* {item.status === 'uploaded' && (
+                        <button
+                          type="button"
+                          className="memory-upload-btn secondary"
+                          onClick={() => handleReindex(item.id)}
+                          disabled={actionLoading === item.id}
+                        >
+                          {actionLoading === item.id ? 'Queueing…' : 'Re-index'}
+                        </button>
+                      )} */}
+                      <button
+                        type="button"
+                        className="memory-upload-btn secondary"
+                        onClick={() => handleDelete(item.id)}
+                        disabled={actionLoading === item.id}
+                      >
+                        {actionLoading === item.id ? 'Removing…' : 'Delete'}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
-            {uploadMessage && <p className="text-muted">{uploadMessage}</p>}
-            {uploadError && <p className="profile-error">{uploadError}</p>}
-            {ingestionStatus && (
-              <p className="text-muted">
-                Latest ingestion: {ingestionStatus.status} ({ingestionStatus.processed}/{ingestionStatus.total} files)
-                {ingestionStatus.updatedAt ? ` • updated ${new Date(ingestionStatus.updatedAt).toLocaleString()}` : ''}
-              </p>
-            )}
-            {!ingestionStatus && !statusLoading && (
-              <p className="text-muted">No bespoke memory uploads yet.</p>
-            )}
-            {statusLoading && <p className="text-muted">Checking ingestion status…</p>}
-          </section>
-          <section>
-            <h3>How contextualization works</h3>
-            <ol className="memory-plan">
-              <li>
-                <strong>Chunking:</strong> we split text files into semantic chunks, skipping media/PDFs to keep signal high.
-              </li>
-              <li>
-                <strong>Embeddings + FAISS:</strong> each chunk is embedded and persisted in a FAISS index per collection.
-              </li>
-              <li>
-                <strong>RRF fusion:</strong> during queries we pull top results from Gmail, Outlook, and Bespoke Memory, then
-                blend them with Reciprocal Rank Fusion so the agent always sees the most relevant snippets.
-              </li>
-            </ol>
-            <p className="text-muted">
-              Additional ingestion sources (GitHub repos, cloud drives) will plug into the same pipeline.
-            </p>
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MemoryProgress({ status }: { status: BespokeStatus }) {
+  const isIndexing = status.status !== 'chunking' && status.status !== 'failed' && status.status !== 'uploaded';
+  const total = isIndexing ? status.totalChunks || status.totalFiles || 0 : status.totalFiles || 0;
+  const current = isIndexing ? status.indexedChunks : status.chunkedFiles;
+  const progress = total ? Math.min(100, (current / total) * 100) : 0;
+  const label = isIndexing
+    ? `${status.statusLabel} · ${status.indexedChunks}/${status.totalChunks || '—'} chunks`
+    : `${status.statusLabel} · ${status.chunkedFiles}/${status.totalFiles} files`;
+  return (
+    <div className="memory-upload-progress">
+      <div className="progress-track">
+        <div className="progress-value active" style={{ width: `${progress}%` }} />
+      </div>
+      <p>{label}</p>
     </div>
   );
 }

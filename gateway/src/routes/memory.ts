@@ -8,7 +8,12 @@ import {
   createMemoryIngestion,
   getLatestMemoryIngestion,
   insertMemoryChunk,
-  updateMemoryIngestion
+  updateMemoryIngestion,
+  listMemoryIngestions,
+  deleteMemoryIngestion,
+  resetIngestionEmbeddings,
+  getMemoryIngestionById,
+  clearAllMemoryIngestions
 } from '../services/db';
 import { triggerMemoryIndexing } from '../services/brainClient';
 
@@ -45,13 +50,24 @@ router.post('/upload', upload.array('files'), async (req, res) => {
       ? [pathsField]
       : [];
 
+  let batchName = 'Upload';
+  if (relativePaths.length) {
+    const firstPath = relativePaths[0];
+    if (firstPath.includes('/')) {
+      batchName = firstPath.split('/')[0] || batchName;
+    } else {
+      batchName = firstPath || batchName;
+    }
+  }
+
   try {
     const ingestionId = await createMemoryIngestion({
       userId: TEST_USER_ID,
       source: 'bespoke_memory',
-      totalFiles: files.length
+      totalFiles: files.length,
+      batchName
     });
-
+    await updateMemoryIngestion({ ingestionId, status: 'chunking', processedFiles: 0, chunkedFiles: 0, error: null });
     processMemoryIngestion(files, relativePaths, ingestionId).catch((error) => {
       console.error('Memory ingestion processing failed', error);
     });
@@ -63,20 +79,105 @@ router.post('/upload', upload.array('files'), async (req, res) => {
   }
 });
 
+const STATUS_LABELS: Record<string, string> = {
+  chunking: 'Uploading',
+  chunked: 'Ready to index',
+  indexing: 'Indexing',
+  uploaded: 'Uploaded',
+  failed: 'Failed'
+};
+
+function formatIngestion(record: any) {
+  const chunkedFiles = record.chunkedFiles ?? record.processedFiles ?? 0;
+  return {
+    id: record.id,
+    status: record.status,
+    statusLabel: STATUS_LABELS[record.status] ?? record.status,
+    totalFiles: record.totalFiles ?? 0,
+    chunkedFiles,
+    indexedChunks: record.indexedChunks ?? 0,
+    totalChunks: record.totalChunks ?? 0,
+    createdAt: record.createdAt,
+    completedAt: record.completedAt,
+    lastIndexedAt: record.lastIndexedAt,
+    batchName: record.batchName,
+    error: record.error
+  };
+}
+
 router.get('/status', async (_req, res) => {
   try {
     const latest = await getLatestMemoryIngestion(TEST_USER_ID, 'bespoke_memory');
-    return res.json({ ingestion: latest });
+    if (!latest) {
+      return res.json({ ingestion: null });
+    }
+    return res.json({ ingestion: formatIngestion(latest) });
   } catch (error) {
     console.error('Failed to load memory ingestion status', error);
     return res.status(500).json({ error: 'Failed to load status.' });
   }
 });
 
+router.get('/history', async (req, res) => {
+  const limit = Number(req.query.limit) || 10;
+  try {
+    const rows = await listMemoryIngestions(TEST_USER_ID, limit);
+    return res.json({ history: rows.map(formatIngestion) });
+  } catch (error) {
+    console.error('Failed to load ingestion history', error);
+    return res.status(500).json({ error: 'Failed to load history.' });
+  }
+});
+
+router.post('/:ingestionId/reindex', async (req, res) => {
+  const ingestionId = req.params.ingestionId;
+  try {
+    const record = await getMemoryIngestionById(ingestionId, TEST_USER_ID);
+    if (!record) {
+      return res.status(404).json({ error: 'Ingestion not found.' });
+    }
+    await resetIngestionEmbeddings(ingestionId);
+    await updateMemoryIngestion({
+      ingestionId,
+      indexedChunks: 0,
+      status: 'chunked',
+      error: null,
+      lastIndexedAt: null
+    });
+    await triggerMemoryIndexing(TEST_USER_ID);
+    return res.json({ status: 'queued' });
+  } catch (error) {
+    console.error('Failed to reindex ingestion', error);
+    return res.status(500).json({ error: 'Failed to reindex ingestion.' });
+  }
+});
+
+router.delete('/:ingestionId', async (req, res) => {
+  const ingestionId = req.params.ingestionId;
+  try {
+    await deleteMemoryIngestion(ingestionId, TEST_USER_ID);
+    await triggerMemoryIndexing(TEST_USER_ID);
+    return res.json({ status: 'deleted' });
+  } catch (error) {
+    console.error('Failed to delete ingestion', error);
+    return res.status(500).json({ error: 'Failed to delete ingestion.' });
+  }
+});
+
+router.delete('/', async (_req, res) => {
+  try {
+    await clearAllMemoryIngestions(TEST_USER_ID, 'bespoke_memory');
+    await triggerMemoryIndexing(TEST_USER_ID);
+    return res.json({ status: 'cleared' });
+  } catch (error) {
+    console.error('Failed to clear bespoke memories', error);
+    return res.status(500).json({ error: 'Failed to clear bespoke memories.' });
+  }
+});
+
 export default router;
 
 async function processMemoryIngestion(files: Express.Multer.File[], relativePaths: string[], ingestionId: string) {
-  await updateMemoryIngestion({ ingestionId, status: 'processing', processedFiles: 0 });
   let processed = 0;
   try {
     for (let index = 0; index < files.length; index += 1) {
@@ -100,7 +201,12 @@ async function processMemoryIngestion(files: Express.Multer.File[], relativePath
         }
       } finally {
         processed += 1;
-        await updateMemoryIngestion({ ingestionId, processedFiles: processed });
+        await updateMemoryIngestion({
+          ingestionId,
+          processedFiles: processed,
+          chunkedFiles: processed,
+          status: 'chunking'
+        });
         try {
           await fsPromises.unlink(file.path);
         } catch {
@@ -108,8 +214,13 @@ async function processMemoryIngestion(files: Express.Multer.File[], relativePath
         }
       }
     }
-    await updateMemoryIngestion({ ingestionId, status: 'completed', processedFiles: processed });
-    await triggerMemoryIndexing();
+    await updateMemoryIngestion({
+      ingestionId,
+      status: 'chunked',
+      processedFiles: processed,
+      chunkedFiles: processed
+    });
+    await triggerMemoryIndexing(TEST_USER_ID);
   } catch (error) {
     await updateMemoryIngestion({
       ingestionId,
