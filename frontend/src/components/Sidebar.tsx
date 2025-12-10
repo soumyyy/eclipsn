@@ -257,10 +257,10 @@ export function Sidebar() {
             <div>
               <p className="connection-title">Bespoke Memory</p>
               <p className="text-muted connection-subtitle">
-                Upload local text repositories for RAG
+                Ingest your document as memories.
               </p>
             </div>
-            <span className="connection-action">Open</span>
+            {/* <span className="connection-action">Open</span> */}
           </button>
 
         </div>

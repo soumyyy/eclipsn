@@ -1,6 +1,6 @@
 from typing import List
 from ..models.schemas import Task, GmailThread
-from ..services.gateway_client import fetch_gmail_threads, semantic_gmail_search
+from ..services.gateway_client import fetch_gmail_threads, semantic_gmail_search, fetch_gmail_thread_detail
 
 
 async def gmail_search_tool(user_id: str, query: str, limit: int = 20) -> List[GmailThread]:
@@ -24,8 +24,17 @@ async def gmail_search_tool(user_id: str, query: str, limit: int = 20) -> List[G
 
 
 async def gmail_get_thread_tool(user_id: str, thread_id: str) -> GmailThread:
-    _ = (user_id, thread_id)
-    return GmailThread(id=thread_id, subject="Demo thread", summary="Detailed thread body")
+    detail = await fetch_gmail_thread_detail(thread_id)
+    if not detail:
+        return GmailThread(id=thread_id, subject="Thread", summary="Thread not found")
+    return GmailThread(
+        id=thread_id,
+        subject=detail.get('subject', 'Thread'),
+        summary=detail.get('body', detail.get('summary')),
+        link=detail.get('link'),
+        sender=detail.get('sender'),
+        last_message_at=detail.get('lastMessageAt')
+    )
 
 
 async def gmail_summarize_thread_tool(user_id: str, thread_id: str) -> str:

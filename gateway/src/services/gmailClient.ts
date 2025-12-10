@@ -5,7 +5,11 @@ import {
   saveGmailTokens,
   saveGmailThreads,
   GmailThreadRecord,
-  upsertGmailEmbedding
+  upsertGmailEmbedding,
+  getGmailThreadBody,
+  upsertGmailThreadBody,
+  getGmailThreadMetadata,
+  getGmailThreadMetadataByGmailId
 } from './db';
 import { embedEmailText } from './embeddings';
 
@@ -148,6 +152,81 @@ export async function fetchRecentThreads(
     }
   }
   return { threads: summaries, nextPageToken: threadList.data.nextPageToken, counts };
+}
+
+export async function fetchThreadBody(userId: string, gmailThreadId: string) {
+  const metadata = await getGmailThreadMetadataByGmailId(userId, gmailThreadId);
+  if (!metadata) {
+    throw new Error('Thread not found');
+  }
+  const cached = await getGmailThreadBody(metadata.id);
+  if (cached) {
+    return {
+      gmailThreadId: metadata.gmailThreadId,
+      subject: metadata.subject,
+      summary: metadata.summary,
+      sender: metadata.sender,
+      lastMessageAt: metadata.lastMessageAt,
+      body: cached,
+      link: `https://mail.google.com/mail/u/0/#inbox/${metadata.gmailThreadId}`
+    };
+  }
+
+  const gmail = await getAuthorizedGmail(userId);
+  const response = await gmail.users.threads.get({
+    userId: 'me',
+    id: metadata.gmailThreadId,
+    format: 'full'
+  });
+  const messages = response.data.messages || [];
+  let bodyText = '';
+  for (const message of messages.reverse()) {
+    const text = extractPlainText(message.payload);
+    if (text) {
+      bodyText += text.trim() + '\n\n';
+    }
+  }
+  bodyText = bodyText.trim() || metadata.summary || '';
+  await upsertGmailThreadBody({ userId, threadRowId: metadata.id, body: bodyText });
+  return {
+    gmailThreadId: metadata.gmailThreadId,
+    subject: metadata.subject,
+    summary: metadata.summary,
+    sender: metadata.sender,
+    lastMessageAt: metadata.lastMessageAt,
+    body: bodyText,
+    link: `https://mail.google.com/mail/u/0/#inbox/${metadata.gmailThreadId}`
+  };
+}
+
+function extractPlainText(payload: any): string {
+  if (!payload) return '';
+  const { mimeType, body, parts } = payload;
+  if (mimeType === 'text/plain' && body?.data) {
+    return decodeBase64(body.data);
+  }
+  if (mimeType === 'text/html' && body?.data) {
+    return stripHtml(decodeBase64(body.data));
+  }
+  if (parts && parts.length) {
+    for (const part of parts) {
+      const text = extractPlainText(part);
+      if (text) return text;
+    }
+  }
+  if (body?.data) {
+    return decodeBase64(body.data);
+  }
+  return '';
+}
+
+function decodeBase64(data: string): string {
+  const normalized = data.replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(normalized, 'base64').toString('utf-8');
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, ' ');
 }
 
 export async function getGmailProfile(userId: string): Promise<{ email: string; avatarUrl: string; name: string }> {

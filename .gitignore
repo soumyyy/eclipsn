@@ -56,3 +56,4 @@ poetry.lock.bak
 gateway/tmp/
 
 brain/faiss/
+db/migrations/

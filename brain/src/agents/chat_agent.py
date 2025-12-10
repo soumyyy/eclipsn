@@ -16,6 +16,7 @@ from ..tools import (
     gmail_search_tool,
     gmail_semantic_search_tool,
     profile_update_tool,
+    gmail_get_thread_tool,
 )
 
 
@@ -101,6 +102,11 @@ def _build_tools(user_id: str) -> List[Tool]:
     async def gmail_semantic_coro(q: str) -> str:
         return await gmail_semantic_search_tool(user_id=user_id, query=q, limit=5)
 
+    async def gmail_detail_coro(q: str) -> str:
+        thread_id = q.strip()
+        detail = await gmail_get_thread_tool(user_id=user_id, thread_id=thread_id)
+        return json.dumps(detail.dict())
+
     async def profile_coro(field: str | None = None, value: str | None = None, note: str | None = None) -> str:
         return await profile_update_tool(field=field, value=value, note=note)
 
@@ -110,6 +116,12 @@ def _build_tools(user_id: str) -> List[Tool]:
             func=lambda q: "Memory lookup available only in async mode.",
             coroutine=memory_coro,
             description="Retrieve relevant long-term memories about the user."
+        ),
+        Tool(
+            name="gmail_thread_detail",
+            func=lambda q: "Gmail detail available only in async mode.",
+            coroutine=gmail_detail_coro,
+            description="Fetch the full content of a Gmail thread. Pass the thread ID shown in gmail_semantic_search results."
         ),
         Tool(
             name="web_search",

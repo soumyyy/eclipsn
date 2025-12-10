@@ -225,6 +225,84 @@ export async function searchGmailEmbeddings(params: {
   }
 }
 
+export async function upsertGmailThreadBody(params: {
+  userId: string;
+  threadRowId: string;
+  body: string;
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO gmail_thread_bodies (id, user_id, thread_id, body)
+       VALUES (gen_random_uuid(), $1, $2, $3)
+       ON CONFLICT (thread_id)
+       DO UPDATE SET body = EXCLUDED.body,
+                     created_at = NOW()`,
+      [params.userId, params.threadRowId, params.body]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function getGmailThreadBody(threadRowId: string) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT body FROM gmail_thread_bodies WHERE thread_id = $1`,
+      [threadRowId]
+    );
+    if (result.rowCount === 0) return null;
+    return result.rows[0].body as string;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getGmailThreadMetadata(threadRowId: string) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT id,
+              thread_id as "gmailThreadId",
+              subject,
+              summary,
+              sender,
+              category,
+              last_message_at as "lastMessageAt"
+       FROM gmail_threads
+       WHERE id = $1`,
+      [threadRowId]
+    );
+    if (result.rowCount === 0) return null;
+    return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+export async function getGmailThreadMetadataByGmailId(userId: string, gmailThreadId: string) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT id,
+              thread_id as "gmailThreadId",
+              subject,
+              summary,
+              sender,
+              category,
+              last_message_at as "lastMessageAt"
+       FROM gmail_threads
+       WHERE user_id = $1 AND thread_id = $2`,
+      [userId, gmailThreadId]
+    );
+    if (result.rowCount === 0) return null;
+    return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
 export async function insertMessage(params: {
   userId: string;
   conversationId: string;

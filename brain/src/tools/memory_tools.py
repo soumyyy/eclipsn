@@ -31,7 +31,7 @@ async def _gmail_semantic_results(user_id: str, query: str, limit: int = 5) -> L
         subject = entry.get("subject") or "(no subject)"
         snippet = entry.get("summary") or entry.get("snippet") or ""
         sender = entry.get("sender") or ""
-        text = f"{subject}\n{snippet}".strip()
+        text = f"[thread:{entry.get('threadId')}] {subject}\n{snippet}".strip()
         if not text:
             continue
         memories.append(

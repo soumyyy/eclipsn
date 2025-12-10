@@ -7,7 +7,7 @@ import {
   getGmailTokens,
   deleteGmailTokens
 } from '../services/db';
-import { fetchRecentThreads, getGmailProfile, NO_GMAIL_TOKENS } from '../services/gmailClient';
+import { fetchRecentThreads, getGmailProfile, NO_GMAIL_TOKENS, fetchThreadBody } from '../services/gmailClient';
 import { embedEmailText } from '../services/embeddings';
 import { TEST_USER_ID } from '../constants';
 
@@ -167,5 +167,22 @@ router.post('/threads/search', async (req, res) => {
       return res.status(401).json({ error: 'Gmail not connected' });
     }
     return res.status(500).json({ error: 'Failed to search Gmail' });
+  }
+});
+
+router.get('/threads/:threadId', async (req, res) => {
+  const threadId = req.params.threadId;
+  try {
+    const detail = await fetchThreadBody(TEST_USER_ID, threadId);
+    return res.json(detail);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Thread not found') {
+      return res.status(404).json({ error: 'Thread not found' });
+    }
+    if (error instanceof Error && error.message === NO_GMAIL_TOKENS) {
+      return res.status(401).json({ error: 'Gmail not connected' });
+    }
+    console.error('Failed to fetch Gmail thread body', error);
+    return res.status(500).json({ error: 'Failed to fetch Gmail thread' });
   }
 });
