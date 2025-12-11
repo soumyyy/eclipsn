@@ -228,8 +228,8 @@ export function Sidebar() {
                 {outlookLoading
                   ? 'Checking…'
                   : outlookStatus?.connected
-                    ? 'Connected to Microsoft Graph'
-                    : 'Connect your Outlook mail'}
+                    ? 'Connected to Microsoft'
+                    : ''}
               </p>
             </div>
             <span className="connection-action">
@@ -244,7 +244,7 @@ export function Sidebar() {
             <div>
               <p className="connection-title">Bespoke Memory</p>
               <p className="text-muted connection-subtitle">
-                Ingest your document as memories.
+                Ingest your memories.
               </p>
             </div>
             {/* <span className="connection-action">Open</span> */}

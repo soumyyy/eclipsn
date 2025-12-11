@@ -120,7 +120,12 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
         throw new Error(payload.error || 'Failed to load file graph');
       }
       const data = await response.json();
-      setGraphData(data.graph ?? null);
+      setGraphData((prev) => {
+        if (prev && shallowGraphEqual(prev, data.graph ?? null)) {
+          return prev;
+        }
+        return data.graph ?? null;
+      });
     } catch (error) {
       console.error('Failed to load file graph', error);
       setGraphError((error as Error).message || 'Failed to load graph');
@@ -137,7 +142,7 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
       loadFileGraph();
     };
     refresh();
-    const interval = setInterval(refresh, 6000);
+    const interval = setInterval(refresh, 300000);
     return () => clearInterval(interval);
   }, [loadFileGraph]);
 
@@ -415,7 +420,7 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
               <section className="memory-graph-section">
             <div className="memory-history-header">
               <h3>Graph View</h3>
-              <small>All uploads</small>
+              {/* <small>All uploads</small> */}
             </div>
             <MemoryGraphPanel
               graph={graphData}
@@ -477,14 +482,14 @@ function MemoryGraphPanel({
 
   return (
     <div className="memory-graph-panel">
-      <div className="graph-document-card">
+      {/* <div className="graph-document-card">
         <p className="graph-document-summary">{docDescription}</p>
-      </div>
+      </div> */}
       <div className="graph-canvas">
         <FileGraphCanvas layout={layout} />
         <div className="graph-toggle-row">
-          <span>{nodeCount} nodes</span>
-          <span>· {edgeCount} edges</span>
+          <span>{nodeCount} Files</span>
+          {/* <span>· {edgeCount} edges</span> */}
         </div>
       </div>
     </div>
@@ -568,6 +573,20 @@ function computeFileGraphLayout(graph: FileGraphResponse | null): FileGraphLayou
     nodes: positionedNodes,
     edges: edges.filter(Boolean) as FileGraphLayout['edges']
   };
+}
+
+function shallowGraphEqual(a: FileGraphResponse | null, b: FileGraphResponse | null) {
+  if (!a || !b) return false;
+  if ((a.nodes?.length ?? 0) !== (b.nodes?.length ?? 0)) return false;
+  if ((a.edges?.length ?? 0) !== (b.edges?.length ?? 0)) return false;
+  const nodeKey = (node: FileGraphNode) => `${node.id}-${node.filePath}-${node.ingestionId}`;
+  const aNodeKeys = (a.nodes ?? []).map(nodeKey).join('|');
+  const bNodeKeys = (b.nodes ?? []).map(nodeKey).join('|');
+  if (aNodeKeys !== bNodeKeys) return false;
+  const edgeKey = (edge: FileGraphEdge) => `${edge.id}-${edge.source}-${edge.target}`;
+  const aEdgeKeys = (a.edges ?? []).map(edgeKey).join('|');
+  const bEdgeKeys = (b.edges ?? []).map(edgeKey).join('|');
+  return aEdgeKeys === bEdgeKeys;
 }
 
 function FileGraphCanvas({ layout }: { layout: FileGraphLayout }) {
