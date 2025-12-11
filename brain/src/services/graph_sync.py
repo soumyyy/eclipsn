@@ -15,6 +15,7 @@ from .graph_store import (
     upsert_graph_embeddings,
     upsert_graph_nodes,
 )
+from .similarity_graph import sync_similarity_edges_for_ingestions
 
 
 def estimate_tokens(text: str) -> int:
@@ -156,7 +157,7 @@ def build_nodes_and_edges(
                 summary=f"{len(section_chunks)} chunks",
                 source_uri=file_path,
                 source_table="memory_ingestions",
-                source_row_id=ingestion_id,
+                source_row_id=None,
                 metadata_version="bespoke_v1",
                 metadata={
                     "ingestion_id": ingestion_id,
@@ -303,6 +304,7 @@ async def sync_ingestions_to_graph(ingestion_ids: Iterable[str]) -> None:
         await upsert_graph_edges(all_edges)
     if all_embeddings:
         await upsert_graph_embeddings(all_embeddings)
+    await sync_similarity_edges_for_ingestions(ids)
 def normalize_metadata(value) -> dict:
     if value is None:
         return {}

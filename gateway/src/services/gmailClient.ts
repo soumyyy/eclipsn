@@ -151,7 +151,7 @@ export async function fetchRecentThreads(
       console.warn('Failed to embed gmail thread', embedError);
     }
   }
-  return { threads: summaries, nextPageToken: threadList.data.nextPageToken, counts };
+  return { threads: summaries, nextPageToken: threadList.data.nextPageToken ?? undefined, counts };
 }
 
 export async function fetchThreadBody(userId: string, gmailThreadId: string) {

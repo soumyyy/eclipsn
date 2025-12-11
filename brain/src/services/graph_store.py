@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
-def _vector_literal(values: Sequence[float]) -> str:
+def to_pgvector(values: Sequence[float]) -> str:
     return "[" + ",".join(str(float(v)) for v in values) + "]"
 
 from ..models.graph import GraphEdgeType, GraphNodeType
@@ -161,7 +161,7 @@ async def upsert_graph_embeddings(rows: Sequence[GraphEmbeddingInsert]) -> None:
     records = [
         (
             row.node_id,
-            _vector_literal(row.embedding),
+            to_pgvector(row.embedding),
             row.embedding_model,
             row.embedding_version,
             json.dumps(row.metadata or {}),

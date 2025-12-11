@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
 import { promises as fsPromises } from 'node:fs';
+import crypto from 'node:crypto';
 import { TEST_USER_ID } from '../constants';
 import {
   createMemoryIngestion,
@@ -14,10 +15,12 @@ import {
   resetIngestionEmbeddings,
   getMemoryIngestionById,
   clearAllMemoryIngestions,
-  fetchGraphSlice
+  fetchGraphSlice,
+  listMemoryFileNodes,
+  type MemoryFileRecord
 } from '../services/db';
 import { triggerMemoryIndexing } from '../services/brainClient';
-import { GraphNodeType } from '../graph/types';
+import { GraphNodeType, GraphEdgeType } from '../graph/types';
 
 const router = Router();
 const upload = multer({
@@ -179,10 +182,75 @@ router.delete('/', async (_req, res) => {
   }
 });
 
+router.get('/graph', async (req, res) => {
+  const limit = req.query.limit ? Number(req.query.limit) : undefined;
+  try {
+    const files = await listMemoryFileNodes(TEST_USER_ID, limit ?? 400);
+    const nodeKeyMap = new Map<string, string>();
+    const groupedByIngestion = new Map<string, MemoryFileRecord[]>();
+    files.forEach((file) => {
+      const key = `${file.ingestionId}::${file.filePath}`;
+      const nodeId = makeFileGraphNodeId(file.ingestionId, file.filePath);
+      nodeKeyMap.set(key, nodeId);
+      const existing = groupedByIngestion.get(file.ingestionId) ?? [];
+      existing.push(file);
+      groupedByIngestion.set(file.ingestionId, existing);
+    });
+    const nodes = files.map((file) => {
+      const id = nodeKeyMap.get(`${file.ingestionId}::${file.filePath}`) as string;
+      return {
+        id,
+        label: deriveFileLabel(file.filePath),
+        filePath: file.filePath,
+        ingestionId: file.ingestionId,
+        batchName: file.batchName ?? null,
+        createdAt: file.createdAt.toISOString()
+      };
+    });
+    const edges: { id: string; source: string; target: string; ingestionId: string }[] = [];
+    groupedByIngestion.forEach((records, ingestionId) => {
+      const sorted = records
+        .slice()
+        .sort((a, b) => a.filePath.localeCompare(b.filePath, undefined, { sensitivity: 'base' }));
+      for (let index = 0; index < sorted.length - 1; index += 1) {
+        const currentKey = `${ingestionId}::${sorted[index].filePath}`;
+        const nextKey = `${ingestionId}::${sorted[index + 1].filePath}`;
+        const source = nodeKeyMap.get(currentKey);
+        const target = nodeKeyMap.get(nextKey);
+        if (!source || !target) continue;
+        edges.push({
+          id: makeFileGraphEdgeId(source, target),
+          source,
+          target,
+          ingestionId
+        });
+      }
+    });
+    return res.json({
+      graph: {
+        nodes,
+        edges,
+        meta: {
+          nodeCount: nodes.length,
+          edgeCount: edges.length,
+          ingestionCount: groupedByIngestion.size
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Failed to load file graph', error);
+    return res.status(500).json({ error: 'Failed to load file graph.' });
+  }
+});
+
 router.get('/:ingestionId/graph', async (req, res) => {
   const ingestionId = req.params.ingestionId;
   const limit = req.query.limit ? Number(req.query.limit) : undefined;
   const edgeLimit = req.query.edgeLimit ? Number(req.query.edgeLimit) : undefined;
+  const edgeTypesParam = typeof req.query.edgeTypes === 'string' ? req.query.edgeTypes : undefined;
+  const edgeTypes = edgeTypesParam
+    ? (edgeTypesParam.split(',').map((token) => token.trim().toUpperCase()) as GraphEdgeType[])
+    : undefined;
   try {
     const ingestion = await getMemoryIngestionById(ingestionId, TEST_USER_ID);
     if (!ingestion) {
@@ -192,6 +260,7 @@ router.get('/:ingestionId/graph', async (req, res) => {
       userId: TEST_USER_ID,
       ingestionId,
       nodeTypes: [GraphNodeType.DOCUMENT, GraphNodeType.SECTION, GraphNodeType.CHUNK],
+      edgeTypes,
       limit,
       edgeLimit
     });
@@ -269,4 +338,19 @@ function chunkMarkdown(content: string, chunkSize = 1200, overlap = 200): string
     start = end - overlap;
   }
   return chunks;
+}
+
+function makeFileGraphNodeId(ingestionId: string, filePath: string): string {
+  return `FILE_${crypto.createHash('sha1').update(`${ingestionId}::${filePath}`).digest('hex')}`;
+}
+
+function makeFileGraphEdgeId(source: string, target: string): string {
+  const parts = [source, target].sort();
+  return `EDGE_${crypto.createHash('sha1').update(parts.join('::')).digest('hex')}`;
+}
+
+function deriveFileLabel(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter(Boolean);
+  return segments.pop() || normalized;
 }

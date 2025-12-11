@@ -304,6 +304,49 @@ export async function getGmailThreadMetadataByGmailId(userId: string, gmailThrea
   }
 }
 
+export async function removeExpiredGmailThreads(userId: string): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const expiredResult = await client.query(
+      `SELECT id
+         FROM gmail_threads
+        WHERE user_id = $1
+          AND expires_at IS NOT NULL
+          AND expires_at <= NOW()`,
+      [userId]
+    );
+    const ids = expiredResult.rows.map((row) => row.id as string);
+    if (!ids.length) {
+      await client.query('COMMIT');
+      return 0;
+    }
+    await client.query(
+      `DELETE FROM gmail_thread_embeddings
+        WHERE user_id = $1
+          AND thread_id = ANY($2::uuid[])`,
+      [userId, ids]
+    );
+    await client.query(
+      `DELETE FROM gmail_thread_bodies
+        WHERE thread_id = ANY($1::uuid[])`,
+      [ids]
+    );
+    await client.query(
+      `DELETE FROM gmail_threads
+        WHERE id = ANY($1::uuid[])`,
+      [ids]
+    );
+    await client.query('COMMIT');
+    return ids.length;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function insertMessage(params: {
   userId: string;
   conversationId: string;
@@ -556,6 +599,44 @@ export async function listMemoryIngestions(userId: string, limit = 10): Promise<
   }
 }
 
+export interface MemoryFileRecord {
+  ingestionId: string;
+  filePath: string;
+  chunkCount: number;
+  createdAt: Date;
+  batchName?: string | null;
+}
+
+export async function listMemoryFileNodes(userId: string, limit = 400): Promise<MemoryFileRecord[]> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT mc.ingestion_id as "ingestionId",
+              mc.file_path as "filePath",
+              COUNT(*) as "chunkCount",
+              mi.created_at as "createdAt",
+              mi.batch_name as "batchName"
+         FROM memory_chunks mc
+         JOIN memory_ingestions mi ON mi.id = mc.ingestion_id
+        WHERE mi.user_id = $1
+          AND mi.source = 'bespoke_memory'
+        GROUP BY mc.ingestion_id, mc.file_path, mi.created_at, mi.batch_name
+        ORDER BY mi.created_at DESC, mc.file_path ASC
+        LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows.map((row) => ({
+      ingestionId: row.ingestionId as string,
+      filePath: row.filePath as string,
+      chunkCount: Number(row.chunkCount) || 0,
+      createdAt: row.createdAt as Date,
+      batchName: row.batchName as string | null
+    }));
+  } finally {
+    client.release();
+  }
+}
+
 export async function deleteMemoryIngestion(ingestionId: string, userId: string) {
   const client = await pool.connect();
   try {
@@ -686,6 +767,7 @@ export interface GraphSliceResult {
     edgeCount: number;
     filters: {
       nodeTypes?: GraphNodeType[];
+      edgeTypes?: GraphEdgeType[];
       limit: number;
       edgeLimit: number;
       ingestionId?: string;
@@ -697,6 +779,7 @@ export async function fetchGraphSlice(params: {
   userId: string;
   sliceId?: string;
   nodeTypes?: GraphNodeType[];
+  edgeTypes?: GraphEdgeType[];
   limit?: number;
   edgeLimit?: number;
   ingestionId?: string;
@@ -706,6 +789,8 @@ export async function fetchGraphSlice(params: {
   const edgeLimit = params.edgeLimit ?? 400;
   const nodeTypeFilter =
     params.nodeTypes && params.nodeTypes.length > 0 ? params.nodeTypes.map((type) => type) : null;
+  const edgeTypeFilter =
+    params.edgeTypes && params.edgeTypes.length > 0 ? params.edgeTypes.map((type) => type) : null;
   const sliceFilter = params.sliceId ?? null;
   const ingestionFilter = params.ingestionId ?? null;
   try {
@@ -742,10 +827,11 @@ export async function fetchGraphSlice(params: {
            FROM graph_edges
           WHERE user_id = $1
             AND ($2::text IS NULL OR metadata->>'slice_id' = $2)
-            AND ($3::uuid IS NULL OR metadata->>'ingestion_id' = $3::text)
+            AND ($3::text IS NULL OR metadata->>'ingestion_id' = $3)
             AND (from_id = ANY($4::text[]) OR to_id = ANY($4::text[]))
-          LIMIT $5`,
-        [params.userId, sliceFilter, ingestionFilter, nodeIds, edgeLimit]
+            AND ($5::text[] IS NULL OR edge_type::text = ANY($5::text[]))
+          LIMIT $6`,
+        [params.userId, sliceFilter, ingestionFilter, nodeIds, edgeTypeFilter, edgeLimit]
       );
       edges = edgesResult.rows as GraphEdgeRecord[];
     }
@@ -759,6 +845,7 @@ export async function fetchGraphSlice(params: {
         edgeCount: edges.length,
         filters: {
           nodeTypes: params.nodeTypes,
+          edgeTypes: params.edgeTypes,
           limit,
           edgeLimit,
           ingestionId: params.ingestionId
@@ -768,4 +855,156 @@ export async function fetchGraphSlice(params: {
   } finally {
     client.release();
   }
+}
+
+export async function fetchGraphNodesByIds(params: {
+  userId: string;
+  nodeIds: string[];
+  nodeTypes?: GraphNodeType[];
+  ingestionId?: string;
+  limit?: number;
+}): Promise<GraphNodeRecord[]> {
+  if (params.nodeIds.length === 0) return [];
+  const client = await pool.connect();
+  const nodeTypeFilter =
+    params.nodeTypes && params.nodeTypes.length > 0 ? params.nodeTypes.map((type) => type) : null;
+  const ingestionFilter = params.ingestionId ?? null;
+  const limit = params.limit ?? params.nodeIds.length;
+  try {
+    const result = await client.query(
+      `SELECT id,
+              node_type::text as "nodeType",
+              display_name as "displayName",
+              summary,
+              source_uri as "sourceUri",
+              metadata
+         FROM graph_nodes
+        WHERE user_id = $1
+          AND id = ANY($2::text[])
+          AND ($3::text[] IS NULL OR node_type::text = ANY($3::text[]))
+          AND ($4::text IS NULL OR metadata->>'ingestion_id' = $4)
+        LIMIT $5`,
+      [params.userId, params.nodeIds, nodeTypeFilter, ingestionFilter, limit]
+    );
+    return result.rows as GraphNodeRecord[];
+  } finally {
+    client.release();
+  }
+}
+
+export async function fetchGraphEdgesForNodes(params: {
+  userId: string;
+  nodeIds: string[];
+  edgeTypes?: GraphEdgeType[];
+  ingestionId?: string;
+  limit?: number;
+}): Promise<GraphEdgeRecord[]> {
+  if (params.nodeIds.length === 0) return [];
+  const client = await pool.connect();
+  const edgeTypeFilter =
+    params.edgeTypes && params.edgeTypes.length > 0 ? params.edgeTypes.map((type) => type) : null;
+  const ingestionFilter = params.ingestionId ?? null;
+  const limit = params.limit ?? 200;
+  try {
+    const result = await client.query(
+      `SELECT id,
+              edge_type::text as "edgeType",
+              from_id as "fromId",
+              to_id as "toId",
+              weight,
+              score,
+              confidence,
+              rank,
+              metadata
+         FROM graph_edges
+        WHERE user_id = $1
+          AND (from_id = ANY($2::text[]) OR to_id = ANY($2::text[]))
+          AND ($3::text[] IS NULL OR edge_type::text = ANY($3::text[]))
+          AND ($4::text IS NULL OR metadata->>'ingestion_id' = $4)
+        LIMIT $5`,
+      [params.userId, params.nodeIds, edgeTypeFilter, ingestionFilter, limit]
+    );
+    return result.rows as GraphEdgeRecord[];
+  } finally {
+    client.release();
+  }
+}
+
+export async function fetchGraphNeighborhood(params: {
+  userId: string;
+  centerId: string;
+  depth?: number;
+  nodeTypes?: GraphNodeType[];
+  edgeTypes?: GraphEdgeType[];
+  nodeLimit?: number;
+  edgeLimit?: number;
+  ingestionId?: string;
+}): Promise<GraphSliceResult> {
+  const depth = params.depth ?? 1;
+  const nodeLimit = params.nodeLimit ?? 200;
+  const edgeLimit = params.edgeLimit ?? 400;
+  const visited = new Set<string>();
+  const nodeMap = new Map<string, GraphNodeRecord>();
+  const edgeMap = new Map<string, GraphEdgeRecord>();
+  let frontier = new Set<string>([params.centerId]);
+  let remainingNodes = nodeLimit;
+  let remainingEdges = edgeLimit;
+
+  for (let i = 0; i < depth; i += 1) {
+    const batchIds = Array.from(frontier).filter((id) => !visited.has(id));
+    if (!batchIds.length || remainingNodes <= 0) break;
+    const nodes = await fetchGraphNodesByIds({
+      userId: params.userId,
+      nodeIds: batchIds,
+      nodeTypes: params.nodeTypes,
+      ingestionId: params.ingestionId,
+      limit: remainingNodes
+    });
+    nodes.forEach((node) => {
+      if (nodeMap.has(node.id)) return;
+      nodeMap.set(node.id, node);
+      visited.add(node.id);
+      remainingNodes = Math.max(0, remainingNodes - 1);
+    });
+    const nodeIdsForEdges = nodes.map((node) => node.id);
+    if (!nodeIdsForEdges.length || remainingEdges <= 0) break;
+    const edges = await fetchGraphEdgesForNodes({
+      userId: params.userId,
+      nodeIds: nodeIdsForEdges,
+      edgeTypes: params.edgeTypes,
+      ingestionId: params.ingestionId,
+      limit: remainingEdges
+    });
+    const nextFrontier = new Set<string>();
+    edges.forEach((edge) => {
+      if (!edgeMap.has(edge.id)) {
+        edgeMap.set(edge.id, edge);
+        remainingEdges = Math.max(0, remainingEdges - 1);
+      }
+      if (!visited.has(edge.fromId)) nextFrontier.add(edge.fromId);
+      if (!visited.has(edge.toId)) nextFrontier.add(edge.toId);
+    });
+    frontier = nextFrontier;
+    if (remainingEdges <= 0) {
+      break;
+    }
+  }
+
+  return {
+    nodes: Array.from(nodeMap.values()),
+    edges: Array.from(edgeMap.values()),
+    meta: {
+      sliceId: null,
+      ingestionId: params.ingestionId ?? null,
+      nodeCount: nodeMap.size,
+      edgeCount: edgeMap.size,
+      filters: {
+        nodeTypes: params.nodeTypes,
+        edgeTypes: params.edgeTypes,
+        limit: nodeLimit,
+        edgeLimit,
+        ingestionId: params.ingestionId
+      }
+    }
+  };
 }

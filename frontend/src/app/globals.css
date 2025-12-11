@@ -348,6 +348,10 @@ body {
   box-shadow: 0 0 30px rgba(57, 255, 20, 0.2);
 }
 
+.memory-modal {
+  width: min(1040px, 95vw);
+}
+
 .profile-modal-header {
   display: flex;
   justify-content: space-between;
@@ -605,6 +609,26 @@ body {
 
 .memory-modal input[type="file"] {
   display: none;
+}
+
+.memory-columns {
+  display: grid;
+  grid-template-columns: minmax(320px, 360px) minmax(360px, 1fr);
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.memory-left-column,
+.memory-right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .memory-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 .memory-upload {
@@ -914,6 +938,21 @@ body {
   gap: 16px;
 }
 
+.graph-document-card {
+  border: 1px solid rgba(57, 255, 20, 0.25);
+  border-radius: 12px;
+  background: rgba(5, 5, 5, 0.75);
+  padding: 16px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+}
+
+.graph-document-summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
 .graph-panel-header {
   display: flex;
   justify-content: space-between;
@@ -985,6 +1024,67 @@ body {
 
 .graph-edge-row p {
   margin: 4px 0;
+}
+
+.graph-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.graph-toggle-row input {
+  accent-color: var(--neon);
+}
+
+.graph-controls-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.graph-controls-stack input[type='text'] {
+  background: rgba(5, 5, 5, 0.6);
+  border: 1px solid rgba(57, 255, 20, 0.3);
+  color: var(--text-primary);
+  padding: 8px;
+  font-family: inherit;
+}
+
+.graph-slider input[type='range'] {
+  width: 100%;
+}
+.graph-slider {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(158, 252, 155, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.graph-node-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+.graph-canvas {
+  border: 1px solid rgba(57, 255, 20, 0.3);
+  border-radius: 16px;
+  padding: 12px;
+  background: radial-gradient(circle at top, rgba(57, 255, 20, 0.12), rgba(5, 5, 5, 0.85));
+  box-shadow: inset 0 0 25px rgba(57, 255, 20, 0.08), 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.graph-cytoscape {
+  width: 100%;
+  height: 420px;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .memory-graph-panel {
