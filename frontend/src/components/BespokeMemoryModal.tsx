@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, ChangeEvent, DragEvent, useCallback } from 'react';
-import cytoscape, { Core as CytoscapeInstance, ElementDefinition, LayoutOptions } from 'cytoscape';
+import { useEffect, useState, useRef, ChangeEvent, DragEvent, useCallback, useMemo } from 'react';
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 const FILE_GRAPH_LIMIT = 320;
 
@@ -459,55 +458,7 @@ function MemoryGraphPanel({
   loading: boolean;
   error: string | null;
 }) {
-  const graphContainerRef = useRef<HTMLDivElement | null>(null);
-  const cyRef = useRef<CytoscapeInstance | null>(null);
-
-  useEffect(() => {
-    return () => {
-      cyRef.current?.destroy();
-      cyRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const container = graphContainerRef.current;
-    if (!container) return;
-    if (!cyRef.current) {
-      cyRef.current = cytoscape({
-        container,
-        autounselectify: true,
-        boxSelectionEnabled: false,
-        style: GRAPH_STYLES
-      });
-    }
-    const cy = cyRef.current;
-    if (!graph || (graph.nodes ?? []).length === 0) {
-      cy.elements().remove();
-      return;
-    }
-    const elements = buildGraphElements(graph);
-    cy.batch(() => {
-      cy.elements().remove();
-      cy.add(elements);
-    });
-    cy.resize();
-    try {
-      const layout = cy.layout({
-        name: 'preset',
-        fit: true,
-        padding: 48,
-        animate: false
-      } as LayoutOptions);
-      if (layout && typeof layout.run === 'function') {
-        layout.run();
-      } else {
-        cy.fit(undefined, 48);
-      }
-    } catch (layoutError) {
-      console.warn('Cytoscape preset layout failed', layoutError);
-      cy.fit(undefined, 48);
-    }
-  }, [graph]);
+  const layout = useMemo(() => computeFileGraphLayout(graph), [graph]);
 
   if (loading) {
     return <p className="text-muted">Loading graph…</p>;
@@ -515,7 +466,7 @@ function MemoryGraphPanel({
   if (error) {
     return <p className="profile-error">{error}</p>;
   }
-  if (!graph || (graph.nodes ?? []).length === 0) {
+  if (!graph || !layout || layout.nodes.length === 0) {
     return <p className="text-muted">Graph not ready yet. Upload a batch and let indexing finish.</p>;
   }
 
@@ -530,7 +481,7 @@ function MemoryGraphPanel({
         <p className="graph-document-summary">{docDescription}</p>
       </div>
       <div className="graph-canvas">
-        <div className="graph-cytoscape" ref={graphContainerRef} />
+        <FileGraphCanvas layout={layout} />
         <div className="graph-toggle-row">
           <span>{nodeCount} nodes</span>
           <span>· {edgeCount} edges</span>
@@ -540,98 +491,114 @@ function MemoryGraphPanel({
   );
 }
 
-function buildGraphElements(graph: FileGraphResponse): ElementDefinition[] {
+interface PositionedFileNode extends FileGraphNode {
+  x: number;
+  y: number;
+  color: string;
+  radius: number;
+}
+
+interface FileGraphLayout {
+  nodes: PositionedFileNode[];
+  edges: {
+    id: string;
+    source: PositionedFileNode;
+    target: PositionedFileNode;
+    stroke: string;
+  }[];
+}
+
+function computeFileGraphLayout(graph: FileGraphResponse | null): FileGraphLayout | null {
+  if (!graph || !graph.nodes || graph.nodes.length === 0) return null;
   const groupedByIngestion = new Map<string, FileGraphNode[]>();
-  (graph.nodes ?? []).forEach((node) => {
-    const group = groupedByIngestion.get(node.ingestionId) ?? [];
-    group.push(node);
-    groupedByIngestion.set(node.ingestionId, group);
+  graph.nodes.forEach((node) => {
+    const bucket = groupedByIngestion.get(node.ingestionId) ?? [];
+    bucket.push(node);
+    groupedByIngestion.set(node.ingestionId, bucket);
   });
   const baseRadius = 120;
   const radiusStep = 120;
-  const positions = new Map<string, { x: number; y: number }>();
+  const colorPalette = ['#7dd3fc', '#f472b6', '#a78bfa', '#facc15', '#34d399', '#fb7185'];
+  const positionedNodes: PositionedFileNode[] = [];
   let groupIndex = 0;
   groupedByIngestion.forEach((groupNodes) => {
     const radius = baseRadius + groupIndex * radiusStep;
-    const clampedRadius = radius || baseRadius;
+    const jitter = (Math.random() - 0.5) * 0.4;
     groupNodes.forEach((node, idx) => {
-      const angle = (idx / groupNodes.length) * Math.PI * 2;
-      const x = clampedRadius * Math.cos(angle);
-      const y = clampedRadius * Math.sin(angle);
-      positions.set(node.id, { x, y });
+      const angle = (idx / Math.max(1, groupNodes.length)) * Math.PI * 2 + jitter;
+      const x = radius * Math.cos(angle);
+      const y = radius * Math.sin(angle);
+      positionedNodes.push({
+        ...node,
+        x,
+        y,
+        color: colorPalette[groupIndex % colorPalette.length],
+        radius: 6
+      });
     });
     groupIndex += 1;
   });
-  const nodes: ElementDefinition[] = (graph.nodes ?? []).map((node, index) => {
-    const position =
-      positions.get(node.id) ??
-      {
-        x: baseRadius * Math.cos((index / Math.max(1, graph.nodes.length)) * Math.PI * 2),
-        y: baseRadius * Math.sin((index / Math.max(1, graph.nodes.length)) * Math.PI * 2)
+  if (!groupedByIngestion.size) {
+    graph.nodes.forEach((node, idx) => {
+      const angle = (idx / Math.max(1, graph.nodes.length)) * Math.PI * 2;
+      positionedNodes.push({
+        ...node,
+        x: baseRadius * Math.cos(angle),
+        y: baseRadius * Math.sin(angle),
+        color: colorPalette[idx % colorPalette.length],
+        radius: 6
+      });
+    });
+  }
+  const nodeMap = new Map<string, PositionedFileNode>();
+  positionedNodes.forEach((node) => nodeMap.set(node.id, node));
+  const edges =
+    graph.edges?.map((edge) => {
+      const source = nodeMap.get(edge.source);
+      const target = nodeMap.get(edge.target);
+      if (!source || !target) return null;
+      return {
+        id: edge.id,
+        source,
+        target,
+        stroke: 'rgba(86, 238, 255, 0.45)'
       };
-    return {
-      data: {
-        id: node.id,
-        label: node.label,
-        nodeType: 'FILE',
-        ingestionId: node.ingestionId,
-        batchName: node.batchName ?? '',
-        filePath: node.filePath,
-        createdAt: node.createdAt
-      },
-      position
-    };
-  });
-  const edges: ElementDefinition[] = (graph.edges ?? []).map((edge) => ({
-    data: {
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      edgeType: 'RELATED',
-      ingestionId: edge.ingestionId
-    }
-  }));
-  return [...nodes, ...edges];
+    }) ?? [];
+  return {
+    nodes: positionedNodes,
+    edges: edges.filter(Boolean) as FileGraphLayout['edges']
+  };
 }
 
-const GRAPH_STYLES = [
-  {
-    selector: 'node',
-    style: {
-      'background-color': 'rgba(92, 255, 199, 0.75)',
-      'border-width': 0,
-      width: 9,
-      height: 9,
-      label: 'data(label)',
-      color: '#0b0f0c',
-      'font-size': 9,
-      'text-wrap': 'wrap',
-      'text-max-width': 100,
-      'text-outline-width': 2,
-      'text-outline-color': 'rgba(5, 5, 5, 0.8)',
-      'border-color': 'rgba(5, 5, 5, 0.8)'
-    }
-  },
-  {
-    selector: 'node:selected',
-    style: {
-      width: 16,
-      height: 16,
-      color: '#111',
-      'font-size': 11,
-      'text-outline-width': 3
-    }
-  },
-  {
-    selector: 'edge',
-    style: {
-      width: 1.8,
-      'curve-style': 'bezier',
-      'line-color': 'rgba(86, 238, 255, 0.5)',
-      'target-arrow-color': 'rgba(86, 238, 255, 0.85)',
-      'target-arrow-shape': 'triangle',
-      'arrow-scale': 0.85,
-      opacity: 0.9
-    }
-  }
-] as unknown as cytoscape.StylesheetJson;
+function FileGraphCanvas({ layout }: { layout: FileGraphLayout }) {
+  const width = 640;
+  const height = 420;
+  const viewBox = `${-width / 2} ${-height / 2} ${width} ${height}`;
+  return (
+    <svg className="graph-svg" viewBox={viewBox} role="img" aria-label="Bespoke memory graph">
+      <g strokeWidth={1}>
+        {layout.edges.map((edge) => (
+          <line
+            key={edge.id}
+            x1={edge.source.x}
+            y1={edge.source.y}
+            x2={edge.target.x}
+            y2={edge.target.y}
+            stroke={edge.stroke}
+            strokeOpacity={0.8}
+          />
+        ))}
+      </g>
+      <g>
+        {layout.nodes.map((node) => (
+          <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
+            <circle r={node.radius} fill={node.color} stroke="rgba(0,0,0,0.6)" strokeWidth={1} />
+            <text y={-node.radius - 4} textAnchor="middle" fill="#ffffff" fontSize="12">
+              {node.label}
+            </text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
