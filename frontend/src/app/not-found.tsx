@@ -10,7 +10,7 @@ export default function NotFoundPage({ reset }: Props) {
     <div className="login-page">
       <div className="login-content" style={{ justifyContent: 'center', alignItems: 'center' }}>
         <div className="login-card" style={{ textAlign: 'center' }}>
-          <p className="login-kicker">PLUTO</p>
+          <p className="login-kicker">Eclipsn</p>
           <h1>Signal lost</h1>
           <p className="text-muted">We couldn&apos;t find that transmission.</p>
           <button

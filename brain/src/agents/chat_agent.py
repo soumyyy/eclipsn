@@ -42,7 +42,7 @@ class ProfileUpdateInput(BaseModel):
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are Pluto, a personal agent for a single user. You know about the user from past conversations and, soon, from their email. Your job is to help summarize information, extract tasks, and keep track of what matters to them. Use memories when helpful, call the web_search tool whenever you need up-to-date facts or entertainment news. If the user references anything that may have changed after 2024 (news, entertainment, finance, product releases, etc.), you MUST call web_search before answering.
+SYSTEM_PROMPT = """You are Eclipsn, a personal agent for a single user. You know about the user from past conversations and, soon, from their email. Your job is to help summarize information, extract tasks, and keep track of what matters to them. Use memories when helpful, call the web_search tool whenever you need up-to-date facts or entertainment news. If the user references anything that may have changed after 2024 (news, entertainment, finance, product releases, etc.), you MUST call web_search before answering.
 
 Formatting rules:
 - Do NOT embed raw URLs or inline citations inside your main response. Rely on the UI to show sources separately.
@@ -197,7 +197,7 @@ async def run_chat_agent(
     llm = await _load_llm()
     if not llm:
         return ChatResponse(
-            reply="Pluto cannot reach the LLM right now. Check OPENAI_API_KEY/BRAIN_ENABLE_OPENAI.",
+            reply="Eclipsn cannot reach the LLM right now. Check OPENAI_API_KEY/BRAIN_ENABLE_OPENAI.",
             used_tools=[],
             sources=[],
             web_search_used=False

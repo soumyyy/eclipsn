@@ -1,9 +1,9 @@
-# Pluto
+# Eclipsn
 
-Pluto is a personal agent inspired by Bind.ai and Poke that focuses on a single user’s knowledge graph, Gmail, and long-term memory. It offers a chat-first experience with a clear gateway and brain split so each layer can evolve independently.
+Eclipsn is a personal agent inspired by Bind.ai and Poke that focuses on a single user’s knowledge graph, Gmail, and long-term memory. It offers a chat-first experience with a clear gateway and brain split so each layer can evolve independently.
 
 ## Phase 1 Features
-- Chat with Pluto via the web UI.
+- Chat with Eclipsn via the web UI.
 - Persist long-term memories from chats or Gmail-derived knowledge.
 - Connect Gmail (OAuth 2.0, read-only) to ingest mail for summaries and task extraction.
 - Summarize Gmail threads and extract actionable tasks.
@@ -50,12 +50,12 @@ Visit http://localhost:3000, send a chat message, and the UI will proxy through 
 - The gateway now runs background jobs: an incremental sync every 10 minutes (`newer_than:10m` filter) and a midnight cleanup that deletes expired Gmail summaries.
 
 ## User Profile Notes
-- Each user now has a profile row (`user_profiles`) that stores preferred name, contact info, timezone, company/role, and arbitrary `custom_data` for facts Pluto learns.
+- Each user now has a profile row (`user_profiles`) that stores preferred name, contact info, timezone, company/role, and arbitrary `custom_data` for facts Eclipsn learns.
 - Use `GET/POST /api/profile` from the gateway to display or update profile data in the UI.
-- The brain exposes a `profile_update` tool; Pluto calls it automatically when the user shares new personal information, so the agent can remember preferences naturally.
+- The brain exposes a `profile_update` tool; Eclipsn calls it automatically when the user shares new personal information, so the agent can remember preferences naturally.
 
 ## Web Search Notes
-- Pluto uses Tavily for web intelligence. Set `TAVILY_API_KEY` in `.env` to enable it.
+- Eclipsn uses Tavily for web intelligence. Set `TAVILY_API_KEY` in `.env` to enable it.
 - When enabled, the brain service will call Tavily for complex/unknown questions, share which sources were queried, and summarize the findings inside the chat response.
 
 ## Security Notes

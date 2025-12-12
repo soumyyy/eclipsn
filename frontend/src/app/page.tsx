@@ -47,7 +47,7 @@ export default function ChatPage() {
     const placeholderMessage: ChatMessage = {
       id: placeholderId,
       role: 'assistant',
-      content: 'Pluto is thinking…',
+      content: 'Eclipsn is thinking…',
       sources: [],
       isPlaceholder: true,
       webSearchUsed: expectsWeb
@@ -66,7 +66,7 @@ export default function ChatPage() {
       const assistantMessage: ChatMessage = {
         id: placeholderId,
         role: 'assistant',
-        content: response.reply ?? 'Pluto is thinking...',
+        content: response.reply ?? 'Eclipsn is thinking...',
         sources: response.sources ?? [],
         webSearchUsed: response.web_search_used ?? false,
         isPlaceholder: false
@@ -80,7 +80,7 @@ export default function ChatPage() {
       const errorMessage: ChatMessage = {
         id: placeholderId,
         role: 'assistant',
-        content: 'Sorry, something went wrong talking to Pluto.',
+        content: 'Sorry, something went wrong talking to Eclipsn.',
         isPlaceholder: false
       };
       setMessages((prev) =>

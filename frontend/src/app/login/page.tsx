@@ -13,15 +13,15 @@ const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:400
 const QUESTIONS: OnboardingQuestion[] = [
   {
     id: 'fullName',
-    label: 'What should Pluto call you?',
+    label: 'What should Eclipsn call you?',
     placeholder: 'Full name or callsign',
     helperText: 'Optional — we use this to personalize responses.'
   },
   {
     id: 'personalNote',
-    label: 'Anything specific you’d like Pluto to remember?',
+    label: 'Anything specific you’d like Eclipsn to remember?',
     placeholder: 'e.g. Favorite tone, dietary note, VIP clients',
-    helperText: 'Optional, but helps Pluto stay in character for you.'
+    helperText: 'Optional, but helps Eclipsn stay in character for you.'
   }
 ];
 
@@ -41,7 +41,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (sessionLoading) return;
     if (typeof window === 'undefined') return;
-    const hasLocalProfile = localStorage.getItem('plutoOnboarded') === 'true';
+    const hasLocalProfile = localStorage.getItem('EclipsnOnboarded') === 'true';
     if (session && hasActiveSession(session)) {
       router.replace('/');
       return;
@@ -63,7 +63,7 @@ export default function LoginPage() {
     setAuthLoading(true);
     try {
       popupRef.current = window.open(
-        `${GATEWAY_URL}/api/gmail/connect?state=pluto`,
+        `${GATEWAY_URL}/api/gmail/connect?state=Eclipsn`,
         'gmailOAuth',
         'width=520,height=640'
       );
@@ -135,9 +135,9 @@ export default function LoginPage() {
         }).catch(() => undefined);
       }
       if (typeof window !== 'undefined') {
-        localStorage.setItem('plutoOnboarded', 'true');
+        localStorage.setItem('EclipsnOnboarded', 'true');
         if (responses.fullName) {
-          localStorage.setItem('plutoProfileName', responses.fullName);
+          localStorage.setItem('EclipsnProfileName', responses.fullName);
         }
       }
       await refreshSession();
@@ -179,7 +179,7 @@ export default function LoginPage() {
             <div className="onboarding-card success">
               <h2>Launch window secured.</h2>
               <p className="text-muted">
-                Pluto synced your profile. You&apos;re ready to ingest bespoke memories, Gmail threads, and Outlook signals.
+                Eclipsn synced your profile. You&apos;re ready to ingest bespoke memories, Gmail threads, and Outlook signals.
               </p>
               <button type="button" className="onboarding-btn primary" onClick={handleEnterApp} disabled={completing}>
                 Enter Operator Console

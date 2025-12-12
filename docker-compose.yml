@@ -3,12 +3,12 @@ version: '3.9'
 services:
   postgres:
     image: postgres:15
-    container_name: pluto-postgres
+    container_name: Eclipsn-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: pluto
-      POSTGRES_PASSWORD: pluto
-      POSTGRES_DB: pluto
+      POSTGRES_USER: Eclipsn
+      POSTGRES_PASSWORD: Eclipsn
+      POSTGRES_DB: Eclipsn
     ports:
       - "5432:5432"
     volumes:

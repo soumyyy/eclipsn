@@ -31,7 +31,7 @@ export function MessageBubble({
     <div className={containerClass}>
       <div className={bubbleClass}>
         {isPlaceholder && !isUser ? (
-          <div className="thinking-dots" aria-label="Pluto is thinking">
+          <div className="thinking-dots" aria-label="Eclipsn is thinking">
             <span />
             <span />
             <span />
@@ -39,7 +39,7 @@ export function MessageBubble({
         ) : (
           <MarkdownRenderer content={content} />
         )}
-        {/* <span className="message-label">{isUser ? 'USER' : 'PLUTO'}</span> */}
+        {/* <span className="message-label">{isUser ? 'USER' : 'Eclipsn'}</span> */}
         {renderSources && !isPlaceholder && (
           <div className="source-list">
             <div className="source-title">Sources</div>

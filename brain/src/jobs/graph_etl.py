@@ -557,7 +557,7 @@ def run_etl(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Graph ETL pipeline for Pluto corpus slices")
+    parser = argparse.ArgumentParser(description="Graph ETL pipeline for Eclipsn corpus slices")
     parser.add_argument("--input-path", type=Path, required=True, help="Path to file or directory to ingest")
     parser.add_argument("--slice-id", required=True, help="Identifier for this ETL slice")
     parser.add_argument("--user-id", required=True, help="User ID owning the slice")

@@ -9,7 +9,7 @@ router.get('/connect', (_req, res) => {
   if (!process.env.OUTLOOK_CLIENT_ID || !process.env.OUTLOOK_REDIRECT_URI) {
     return res.status(400).send('Outlook OAuth is not configured.');
   }
-  const authUrl = getOutlookAuthUrl('pluto-outlook');
+  const authUrl = getOutlookAuthUrl('Eclipsn-outlook');
   return res.redirect(authUrl);
 });
 

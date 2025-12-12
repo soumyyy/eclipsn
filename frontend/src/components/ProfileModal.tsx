@@ -19,14 +19,15 @@ interface ProfileModalProps {
   gmailActionPending: boolean;
 }
 
-const TABS: Array<{ id: 'profile' | 'connections' | 'history'; label: string }> = [
+const TABS: Array<{ id: 'profile' | 'connections' | 'notes' | 'history'; label: string }> = [
   { id: 'profile', label: 'Profile' },
   { id: 'connections', label: 'Connections' },
+  { id: 'notes', label: 'Notes' },
   { id: 'history', label: 'History' }
 ];
 
 export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActionPending }: ProfileModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'history'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'notes' | 'history'>('profile');
   const [activeNoteIndex, setActiveNoteIndex] = useState<number | null>(null);
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [draftNoteText, setDraftNoteText] = useState('');
@@ -97,7 +98,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
     },
     {
       title: 'Biography',
-      fields: [{ key: 'biography', label: 'Bio', placeholder: 'Tell Pluto about your focus', type: 'textarea' }]
+      fields: [{ key: 'biography', label: 'Bio', placeholder: 'Tell Eclipsn about your focus', type: 'textarea' }]
     }
   ];
 
@@ -228,7 +229,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       return <p className="text-muted">Loading profile…</p>;
     }
     if (!profile) {
-      return <p className="text-muted">Share personal details and Pluto will remember them.</p>;
+      return <p className="text-muted">Share personal details and Eclipsn will remember them.</p>;
     }
     const draft = profileDraft ?? profile;
     return (
@@ -278,7 +279,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
             <div className="profile-section-header">
               <h3>Custom fields</h3>
             </div>
-            <div className="profile-grid">
+            <div className="profile-grid stacked">
               {customExtras.map(([label, value]) => (
                 <div className="profile-field" key={label}>
                   <span>{label}</span>
@@ -288,75 +289,79 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
             </div>
           </section>
         )}
-
-        {normalizedNotes.length > 0 && (
-          <section>
-            <h3>Notes</h3>
-            <ul className="profile-notes-modal">
-              {normalizedNotes.map((note, index) => {
-                const isActive = activeNoteIndex === index;
-                const isEditing = editingNoteIndex === index;
-                return (
-                  <li
-                    key={`${note.text}-${note.timestamp}-${index}`}
-                    className={`profile-note-row ${isActive ? 'active' : ''} ${isEditing ? 'editing' : ''}`}
-                    onClick={() => handleNoteClick(index)}
-                  >
-                    <div className="profile-note-content">
-                      {isEditing ? (
-                        <textarea
-                          value={draftNoteText}
-                          onChange={(evt) => setDraftNoteText(evt.target.value)}
-                          rows={3}
-                          disabled={isSubmitting}
-                        />
-                      ) : (
-                        <>
-                          <p>{note.text}</p>
-                          {note.timestamp && <small className="text-muted">{new Date(note.timestamp).toLocaleString()}</small>}
-                        </>
-                      )}
-                    </div>
-                    <div className="profile-note-actions">
-                      <button
-                        type="button"
-                        className="profile-note-action delete"
-                        disabled={isSubmitting}
-                        onClick={(evt) => {
-                          evt.stopPropagation();
-                          if (isEditing) {
-                            handleCancelEdit();
-                          } else {
-                            handleDeleteNote(index);
-                          }
-                        }}
-                      >
-                        {isEditing ? 'Cancel' : 'Delete'}
-                      </button>
-                      <button
-                        type="button"
-                        className="profile-note-action edit"
-                        disabled={isSubmitting}
-                        onClick={(evt) => {
-                          evt.stopPropagation();
-                          if (isEditing) {
-                            handleSaveNote();
-                          } else {
-                            startEditNote(index);
-                          }
-                        }}
-                      >
-                        {isEditing ? (isSubmitting ? 'Saving…' : 'Save') : 'Edit'}
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-            {error && <p className="profile-error">{error}</p>}
-          </section>
-        )}
       </div>
+    );
+  };
+
+  const renderNotesContent = () => {
+    if (normalizedNotes.length === 0) {
+      return <p className="text-muted">No notes saved yet.</p>;
+    }
+    return (
+      <section>
+        <ul className="profile-notes-modal">
+          {normalizedNotes.map((note, index) => {
+            const isActive = activeNoteIndex === index;
+            const isEditing = editingNoteIndex === index;
+            return (
+              <li
+                key={`${note.text}-${note.timestamp}-${index}`}
+                className={`profile-note-row ${isActive ? 'active' : ''} ${isEditing ? 'editing' : ''}`}
+                onClick={() => handleNoteClick(index)}
+              >
+                <div className="profile-note-content">
+                  {isEditing ? (
+                    <textarea
+                      value={draftNoteText}
+                      onChange={(evt) => setDraftNoteText(evt.target.value)}
+                      rows={3}
+                      disabled={isSubmitting}
+                    />
+                  ) : (
+                    <>
+                      <p>{note.text}</p>
+                      {note.timestamp && <small className="text-muted">{new Date(note.timestamp).toLocaleString()}</small>}
+                    </>
+                  )}
+                </div>
+                <div className="profile-note-actions">
+                  <button
+                    type="button"
+                    className="profile-note-action delete"
+                    disabled={isSubmitting}
+                    onClick={(evt) => {
+                      evt.stopPropagation();
+                      if (isEditing) {
+                        handleCancelEdit();
+                      } else {
+                        handleDeleteNote(index);
+                      }
+                    }}
+                  >
+                    {isEditing ? 'Cancel' : 'Delete'}
+                  </button>
+                  <button
+                    type="button"
+                    className="profile-note-action edit"
+                    disabled={isSubmitting}
+                    onClick={(evt) => {
+                      evt.stopPropagation();
+                      if (isEditing) {
+                        handleSaveNote();
+                      } else {
+                        startEditNote(index);
+                      }
+                    }}
+                  >
+                    {isEditing ? (isSubmitting ? 'Saving…' : 'Save') : 'Edit'}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {error && <p className="profile-error">{error}</p>}
+      </section>
     );
   };
 
@@ -448,12 +453,6 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
                 {[profile.role, profile.company].filter(Boolean).join(' @ ')}
               </p>
             )}
-            {/* {profile?.contactEmail && <p className="text-muted profile-contact-line">{profile.contactEmail}</p>} */}
-            {/* {lastUpdated && (
-              // <small className="text-muted profile-contact-line">
-              //   Updated {lastUpdated}
-              // </small>
-            )} */}
           </div>
         </div>
         <div className="profile-modal-body-grid">

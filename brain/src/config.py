@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = Field(alias="DATABASE_URL", default="postgres://pluto:pluto@localhost:5432/pluto")
+    database_url: str = Field(alias="DATABASE_URL", default="postgres://Eclipsn:Eclipsn@localhost:5432/Eclipsn")
     openai_api_key: str = Field(alias="OPENAI_API_KEY", default="")
     enable_openai: bool = Field(alias="BRAIN_ENABLE_OPENAI", default=False)
     tavily_api_key: str = Field(alias="TAVILY_API_KEY", default="")

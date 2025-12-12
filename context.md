@@ -1,4 +1,4 @@
-# Pluto Workspace Context
+# Eclipsn Workspace Context
 
 This document captures the current state of the project, major features implemented so far, and the key architectural decisions. It serves as a quick reference when planning new work (e.g., the graph-based RAG visualization).
 

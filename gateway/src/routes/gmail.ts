@@ -22,7 +22,7 @@ function formatDateForQuery(date: Date) {
 }
 
 router.get('/connect', (req, res) => {
-  const state = req.query.state?.toString() || 'pluto-dev';
+  const state = req.query.state?.toString() || 'Eclipsn-dev';
   const authUrl = getAuthUrl(state);
   return res.redirect(authUrl);
 });

@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "pluto-brain"
+name = "Eclipsn-brain"
 version = "0.1.0"
-description = "LangChain-powered brain service for Pluto"
-authors = ["Pluto <dev@pluto.local>"]
+description = "LangChain-powered brain service for Eclipsn"
+authors = ["Eclipsn <dev@Eclipsn.local>"]
 package-mode = false
 
 [tool.poetry.dependencies]

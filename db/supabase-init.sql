@@ -1,4 +1,4 @@
--- Run this file inside the Supabase SQL editor to prepare Pluto's schema.
+-- Run this file inside the Supabase SQL editor to prepare Eclipsn's schema.
 -- Assumes the database user has permission to enable these extensions.
 create extension if not exists "pgcrypto";
 create extension if not exists "uuid-ossp";

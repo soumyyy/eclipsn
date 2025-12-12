@@ -78,7 +78,7 @@ export function cacheProfileLocally(profile: UserProfile | null) {
   if (!profile) return;
   const preferred = profile.preferredName ?? profile.fullName ?? '';
   if (preferred) {
-    localStorage.setItem('plutoProfileName', preferred);
+    localStorage.setItem('EclipsnProfileName', preferred);
   }
   const notes = normalizeProfileNotes(profile.customData?.notes ?? []);
   const memo =
@@ -86,9 +86,9 @@ export function cacheProfileLocally(profile: UserProfile | null) {
       ? profile.customData.personalNote
       : firstProfileNoteText(notes) ?? undefined;
   if (memo) {
-    localStorage.setItem('plutoProfileNote', memo);
+    localStorage.setItem('EclipsnProfileNote', memo);
   }
-  localStorage.setItem('plutoOnboarded', 'true');
+  localStorage.setItem('EclipsnOnboarded', 'true');
 }
 
 export function hasActiveSession(snapshot: SessionSnapshot): boolean {

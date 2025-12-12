@@ -3,10 +3,10 @@ import type { ReactNode } from 'react';
 import { SessionProvider } from '@/components/SessionProvider';
 
 export const metadata = {
-  title: 'Pluto',
+  title: 'Eclipsn',
   description: 'Personal agent for long-term knowledge and Gmail',
   icons: {
-    icon: '/plutologo.png'
+    icon: '/Eclipsnlogo.png'
   }
 };
 

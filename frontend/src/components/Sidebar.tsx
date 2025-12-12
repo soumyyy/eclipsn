@@ -20,7 +20,7 @@ export function Sidebar() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const name = localStorage.getItem('plutoProfileName') || '';
+    const name = localStorage.getItem('EclipsnProfileName') || '';
     setLocalIdentity({ name });
   }, []);
 
@@ -44,7 +44,7 @@ export function Sidebar() {
         if (!response.ok) throw new Error('Failed to disconnect Gmail');
         updateGmailStatus({ connected: false });
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('plutoOnboarded');
+          localStorage.removeItem('EclipsnOnboarded');
           window.location.href = '/login';
         }
       } catch (error) {
@@ -80,7 +80,7 @@ export function Sidebar() {
     <>
       <div className="sidebar-root">
         <div>
-          <h1>PLUTO</h1>
+          <h1>Eclipsn</h1>
         </div>
         <section className="sidebar-section">
           <div className="connections-grid">

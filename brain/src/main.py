@@ -8,7 +8,7 @@ from .agents import run_chat_agent
 from .config import get_settings
 from .services.memory_indexer import process_pending_chunks, rebuild_indices_for_users
 
-app = FastAPI(title="Pluto Brain")
+app = FastAPI(title="Eclipsn Brain")
 logger = logging.getLogger(__name__)
 
 app.add_middleware(

@@ -1,11 +1,11 @@
 :root {
   color-scheme: dark;
-  --bg: #000000;
-  --panel: #050505;
-  --neon: #39ff14;
-  --neon-soft: rgba(57, 255, 20, 0.4);
-  --text-primary: #9efc9b;
-  --text-muted: #6cd66a;
+  --bg: #17181c;
+  --panel: #1f2025;
+  --neon: #d7ceb9;
+  --neon-soft: rgba(215, 206, 185, 0.4);
+  --text-primary: #d7ceb9;
+  --text-muted: rgba(215, 206, 185, 0.65);
 }
 
 *,
@@ -23,7 +23,7 @@ body {
 }
 
 .text-muted {
-  color: rgba(158, 252, 155, 0.65);
+  color: rgba(215, 206, 185, 0.65);
 }
 
 .app-shell {
@@ -35,8 +35,8 @@ body {
 .sidebar {
   width: 240px;
   padding: 16px 18px;
-  border-right: 1px solid rgba(57, 255, 20, 0.3);
-  background: rgba(5, 5, 5, 0.9);
+  border-right: 1px solid rgba(215, 206, 185, 0.3);
+  background: rgba(23, 24, 28, 0.9);
   position: sticky;
   top: 0;
   height: 100vh;
@@ -57,12 +57,12 @@ body {
   font-size: 11px;
   letter-spacing: 0.4em;
   text-transform: uppercase;
-  color: rgba(57, 255, 20, 0.8);
+  color: rgba(215, 206, 185, 0.8);
   margin-bottom: 6px;
 }
 
 .sidebar-section p {
-  color: rgba(158, 252, 155, 0.8);
+  color: rgba(215, 206, 185, 0.8);
   margin: 0;
   font-size: 13px;
 }
@@ -102,18 +102,18 @@ body {
 .chat-input-bar {
   position: sticky;
   bottom: 0;
-  border-top: 1px solid rgba(57, 255, 20, 0.3);
+  border-top: 1px solid rgba(215, 206, 185, 0.3);
   padding: 16px;
   display: flex;
   gap: 16px;
-  background: rgba(5, 5, 5, 0.9);
+  background: rgba(23, 24, 28, 0.9);
   backdrop-filter: blur(6px);
 }
 
 .chat-input {
   flex: 1;
   background: transparent;
-  border: 1px solid rgba(57, 255, 20, 0.4);
+  border: 1px solid rgba(215, 206, 185, 0.4);
   color: var(--text-primary);
   padding: 12px;
   font-size: 14px;
@@ -127,7 +127,7 @@ body {
 
 .chat-send {
   background: var(--neon);
-  color: #000;
+  color: #17181c;
   border: none;
   padding: 12px 24px;
   font-weight: 600;
@@ -174,7 +174,7 @@ body {
   width: 48px;
   height: 48px;
   border-radius: 999px;
-  border: 2px solid rgba(57, 255, 20, 0.35);
+  border: 2px solid rgba(215, 206, 185, 0.35);
   position: relative;
   animation: pulse 2s ease-in-out infinite;
   z-index: 0;
@@ -185,7 +185,7 @@ body {
   position: absolute;
   inset: 8px;
   border-radius: 999px;
-  background: rgba(57, 255, 20, 0.5);
+  background: rgba(215, 206, 185, 0.5);
 }
 
 @keyframes pulse {
@@ -212,17 +212,17 @@ body {
   max-width: 640px;
   padding: 16px;
   border-radius: 6px;
-  border: 1px solid rgba(57, 255, 20, 0.4);
-  box-shadow: 0 0 20px rgba(57, 255, 20, 0.15);
+  border: 1px solid rgba(215, 206, 185, 0.4);
+  box-shadow: 0 0 20px rgba(215, 206, 185, 0.15);
 }
 
 .message-bubble.user {
   background: var(--neon);
-  color: #000;
+  color: #17181c;
 }
 
 .message-bubble.assistant {
-  background: #050505;
+  background: #1f2025;
   color: var(--text-primary);
 }
 
@@ -249,7 +249,7 @@ body {
   font-size: 11px;
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: rgba(57, 255, 20, 0.8);
+  color: rgba(215, 206, 185, 0.8);
   margin-bottom: 6px;
 }
 
@@ -264,8 +264,8 @@ body {
   align-items: center;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(57, 255, 20, 0.6);
-  background: rgba(57, 255, 20, 0.1);
+  border: 1px solid rgba(215, 206, 185, 0.6);
+  background: rgba(215, 206, 185, 0.1);
   font-size: 11px;
   color: var(--neon);
   text-decoration: none;
@@ -273,7 +273,7 @@ body {
 }
 
 .source-pill:hover {
-  background: rgba(57, 255, 20, 0.25);
+  background: rgba(215, 206, 185, 0.25);
   color: var(--neon);
 }
 
@@ -293,10 +293,10 @@ body {
 }
 
 .gmail-card {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   padding: 12px;
   border-radius: 8px;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
   margin-top: 8px;
 }
 
@@ -310,7 +310,7 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: 1px solid rgba(57, 255, 20, 0.6);
+  border: 1px solid rgba(215, 206, 185, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -332,7 +332,7 @@ body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.3em;
-  color: rgba(57, 255, 20, 0.8);
+  color: rgba(215, 206, 185, 0.8);
 }
 
 .gmail-button {
@@ -340,7 +340,7 @@ body {
   margin-top: 8px;
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(57, 255, 20, 0.6);
+  border: 1px solid rgba(215, 206, 185, 0.6);
   color: var(--neon);
   text-decoration: none;
   font-size: 12px;
@@ -349,7 +349,7 @@ body {
 }
 
 .gmail-button:hover {
-  background: rgba(57, 255, 20, 0.2);
+  background: rgba(215, 206, 185, 0.2);
 }
 
 .gmail-button.danger {
@@ -368,10 +368,10 @@ body {
 }
 
 .profile-card {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   padding: 12px;
   border-radius: 8px;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
 }
 
 .profile-launch {
@@ -379,8 +379,8 @@ body {
   width: 100%;
   padding: 10px;
   border-radius: 6px;
-  border: 1px solid rgba(57, 255, 20, 0.4);
-  background: rgba(57, 255, 20, 0.1);
+  border: 1px solid rgba(215, 206, 185, 0.4);
+  background: rgba(215, 206, 185, 0.1);
   color: var(--neon);
   text-transform: uppercase;
   letter-spacing: 0.2em;
@@ -410,8 +410,8 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid rgba(57, 255, 20, 0.2);
-  background: rgba(5, 5, 5, 0.55);
+  border: 1px solid rgba(215, 206, 185, 0.2);
+  background: rgba(23, 24, 28, 0.55);
   border-radius: 12px;
   padding: 10px;
   cursor: pointer;
@@ -421,7 +421,7 @@ body {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: rgba(57, 255, 20, 0.3);
+  background: rgba(215, 206, 185, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -442,8 +442,8 @@ body {
 }
 
 .profile-quick-btn {
-  border: 1px solid rgba(57, 255, 20, 0.25);
-  background: rgba(5, 5, 5, 0.55);
+  border: 1px solid rgba(215, 206, 185, 0.25);
+  background: rgba(23, 24, 28, 0.55);
   padding: 10px;
   border-radius: 12px;
   display: flex;
@@ -462,7 +462,7 @@ body {
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(158, 252, 155, 0.7);
+  color: rgba(215, 206, 185, 0.7);
 }
 
 .profile-modal-overlay {
@@ -480,11 +480,11 @@ body {
   width: 760px;
   height: 540px;
   overflow: hidden;
-  background: #050505;
-  border: 1px solid rgba(57, 255, 20, 0.4);
+  background: #1f2025;
+  border: 1px solid rgba(215, 206, 185, 0.4);
   border-radius: 12px;
   padding: 12px 14px 14px;
-  box-shadow: 0 0 30px rgba(57, 255, 20, 0.2);
+  box-shadow: 0 0 30px rgba(215, 206, 185, 0.2);
   display: flex;
   flex-direction: column;
 }
@@ -524,7 +524,7 @@ body {
 }
 
 .gmail-state.connected {
-  color: rgba(57, 255, 20, 0.8);
+  color: rgba(215, 206, 185, 0.8);
 }
 
 .gmail-state.disconnected {
@@ -542,11 +542,11 @@ body {
 }
 
 .message-bubble.user .markdown-body {
-  color: #000;
+  color: #17181c;
 }
 
 .message-bubble.user .markdown-body a {
-  color: #000;
+  color: #17181c;
   text-decoration: underline;
 }
 
@@ -583,7 +583,7 @@ body {
 }
 
 .markdown-body blockquote {
-  border-left: 3px solid rgba(57, 255, 20, 0.4);
+  border-left: 3px solid rgba(215, 206, 185, 0.4);
   padding-left: 1rem;
   margin: 1rem 0;
   color: rgba(255, 255, 255, 0.8);
@@ -630,7 +630,7 @@ body {
 }
 
 .markdown-body a {
-  color: rgba(57, 255, 20, 0.9);
+  color: rgba(215, 206, 185, 0.9);
   text-decoration: underline;
 }
 
@@ -649,7 +649,7 @@ body {
   font-size: 13px;
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: rgba(57, 255, 20, 0.8);
+  color: rgba(215, 206, 185, 0.8);
 }
 
 .profile-grid {
@@ -663,16 +663,16 @@ body {
 }
 
 .profile-field {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   padding: 12px;
   border-radius: 8px;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
   min-height: 72px;
 }
 
 .profile-field.editing {
-  background: rgba(5, 5, 5, 0.95);
-  border-color: rgba(57, 255, 20, 0.35);
+  background: rgba(23, 24, 28, 0.95);
+  border-color: rgba(215, 206, 185, 0.35);
 }
 
 .profile-field span {
@@ -724,8 +724,8 @@ body {
 }
 
 .profile-edit-btn.primary {
-  border-color: rgba(57, 255, 20, 0.4);
-  background: rgba(57, 255, 20, 0.15);
+  border-color: rgba(215, 206, 185, 0.4);
+  background: rgba(215, 206, 185, 0.15);
   color: var(--text-primary);
 }
 
@@ -737,7 +737,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 16px;
-  background: rgba(5, 5, 5, 0.7);
+  background: rgba(23, 24, 28, 0.7);
 }
 
 .profile-section-header {
@@ -778,11 +778,11 @@ body {
 
 .profile-tab-button.active {
   background: #0f0f0f;
-  box-shadow: inset 0 0 0 1px rgba(57, 255, 20, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(215, 206, 185, 0.4);
 }
 
 .profile-tab-button:hover:not(.active) {
-  background: rgba(57, 255, 20, 0.08);
+  background: rgba(215, 206, 185, 0.08);
 }
 
 .profile-tab-icon {
@@ -793,7 +793,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding-left: 16px;
-  border-left: 1px solid rgba(57, 255, 20, 0.25);
+  border-left: 1px solid rgba(215, 206, 185, 0.25);
 }
 
 .profile-tab-stack section {
@@ -817,9 +817,9 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 14px;
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   border-radius: 12px;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
 }
 
 .connection-meta {
@@ -832,7 +832,7 @@ body {
   width: 42px;
   height: 42px;
   border-radius: 999px;
-  border: 1px solid rgba(57, 255, 20, 0.4);
+  border: 1px solid rgba(215, 206, 185, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -867,7 +867,7 @@ body {
 }
 
 .connection-status.online {
-  color: rgba(57, 255, 20, 0.9);
+  color: rgba(215, 206, 185, 0.9);
 }
 
 .connection-status.offline {
@@ -890,8 +890,8 @@ body {
 }
 
 .connection-card {
-  border: 1px solid rgba(57, 255, 20, 0.25);
-  background: rgba(5, 5, 5, 0.7);
+  border: 1px solid rgba(215, 206, 185, 0.25);
+  background: rgba(23, 24, 28, 0.7);
   border-radius: 12px;
   padding: 14px;
   display: flex;
@@ -901,8 +901,8 @@ body {
 
 .connection-card-btn {
   align-self: flex-start;
-  border: 1px solid rgba(57, 255, 20, 0.35);
-  background: rgba(57, 255, 20, 0.15);
+  border: 1px solid rgba(215, 206, 185, 0.35);
+  background: rgba(215, 206, 185, 0.15);
   color: #fff;
   padding: 6px 14px;
   border-radius: 10px;
@@ -923,7 +923,7 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 .profile-tab-content::-webkit-scrollbar-thumb {
-  background: rgba(57, 255, 20, 0.3);
+  background: rgba(215, 206, 185, 0.3);
   border-radius: 999px;
 }
 
@@ -934,8 +934,8 @@ body {
 }
 
 .profile-done-btn {
-  border: 1px solid rgba(57, 255, 20, 0.4);
-  background: rgba(57, 255, 20, 0.15);
+  border: 1px solid rgba(215, 206, 185, 0.4);
+  background: rgba(215, 206, 185, 0.15);
   color: var(--text-primary);
   padding: 6px 14px;
   border-radius: 10px;
@@ -945,10 +945,10 @@ body {
 }
 
 .profile-field {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   padding: 12px;
   border-radius: 8px;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
   min-height: 72px;
 }
 
@@ -956,7 +956,7 @@ body {
   display: block;
   font-size: 11px;
   letter-spacing: 0.2em;
-  color: rgba(158, 252, 155, 0.65);
+  color: rgba(215, 206, 185, 0.65);
   text-transform: uppercase;
   margin-bottom: 4px;
 }
@@ -976,10 +976,10 @@ body {
 }
 
 .profile-notes-modal li {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   border-radius: 8px;
   padding: 10px 12px;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
 }
 
 .profile-note-row {
@@ -992,8 +992,8 @@ body {
 
 .profile-note-row.active,
 .profile-note-row.editing {
-  border-color: rgba(57, 255, 20, 0.4);
-  background: rgba(57, 255, 20, 0.05);
+  border-color: rgba(215, 206, 185, 0.4);
+  background: rgba(215, 206, 185, 0.05);
 }
 
 .profile-note-content {
@@ -1024,8 +1024,8 @@ body {
 }
 
 .profile-note-action {
-  border: 1px solid rgba(57, 255, 20, 0.4);
-  background: rgba(57, 255, 20, 0.15);
+  border: 1px solid rgba(215, 206, 185, 0.4);
+  background: rgba(215, 206, 185, 0.15);
   color: var(--neon);
   padding: 6px 12px;
   border-radius: 6px;
@@ -1050,8 +1050,8 @@ body {
 
 .profile-note-content textarea {
   width: 100%;
-  background: rgba(5, 5, 5, 0.8);
-  border: 1px solid rgba(57, 255, 20, 0.5);
+  background: rgba(23, 24, 28, 0.8);
+  border: 1px solid rgba(215, 206, 185, 0.5);
   color: var(--text-primary);
   padding: 10px;
   font-family: inherit;
@@ -1080,7 +1080,7 @@ body {
 
 .profile-history-field {
   padding-left: 18px;
-  border-left: 2px solid rgba(57, 255, 20, 0.35);
+  border-left: 2px solid rgba(215, 206, 185, 0.35);
 }
 
 .profile-history-label {
@@ -1121,8 +1121,8 @@ body {
 
 .connection-button {
   width: 100%;
-  border: 1px solid rgba(57, 255, 20, 0.3);
-  background: rgba(5, 5, 5, 0.85);
+  border: 1px solid rgba(215, 206, 185, 0.3);
+  background: rgba(23, 24, 28, 0.85);
   color: var(--text-primary);
   padding: 12px;
   border-radius: 10px;
@@ -1135,8 +1135,8 @@ body {
 }
 
 .connection-button.connected {
-  border-color: rgba(57, 255, 20, 0.6);
-  box-shadow: 0 0 12px rgba(57, 255, 20, 0.2);
+  border-color: rgba(215, 206, 185, 0.6);
+  box-shadow: 0 0 12px rgba(215, 206, 185, 0.2);
 }
 
 .connection-button.memory {
@@ -1195,7 +1195,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed rgba(57, 255, 20, 0.4);
+  border: 1px dashed rgba(215, 206, 185, 0.4);
   padding: 12px 18px;
   border-radius: 8px;
   cursor: pointer;
@@ -1207,10 +1207,10 @@ body {
 
 .memory-file-list {
   margin-top: 12px;
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   border-radius: 8px;
   padding: 8px 12px;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
 }
 
 .memory-file-list ul {
@@ -1221,8 +1221,8 @@ body {
 
 .memory-upload-btn {
   margin-top: 10px;
-  border: 1px solid rgba(57, 255, 20, 0.4);
-  background: rgba(57, 255, 20, 0.1);
+  border: 1px solid rgba(215, 206, 185, 0.4);
+  background: rgba(215, 206, 185, 0.1);
   color: var(--neon);
   padding: 8px 14px;
   border-radius: 6px;
@@ -1233,12 +1233,12 @@ body {
 }
 
 .memory-upload-btn.primary {
-  background: rgba(57, 255, 20, 0.2);
+  background: rgba(215, 206, 185, 0.2);
 }
 
 .memory-upload-btn.secondary {
   margin-left: 8px;
-  border-color: rgba(158, 252, 155, 0.4);
+  border-color: rgba(215, 206, 185, 0.4);
   background: transparent;
   color: var(--text-primary);
 }
@@ -1276,7 +1276,7 @@ body {
 }
 
 .memory-dropzone {
-  border: 1px dashed rgba(57, 255, 20, 0.4);
+  border: 1px dashed rgba(215, 206, 185, 0.4);
   border-radius: 10px;
   padding: 20px;
   text-align: center;
@@ -1290,8 +1290,8 @@ body {
 }
 
 .memory-dropzone.active {
-  border-color: rgba(57, 255, 20, 0.8);
-  background: rgba(57, 255, 20, 0.05);
+  border-color: rgba(215, 206, 185, 0.8);
+  background: rgba(215, 206, 185, 0.05);
 }
 
 .memory-dropzone p {
@@ -1313,10 +1313,10 @@ body {
 }
 
 .memory-progress {
-  border: 1px solid rgba(57, 255, 20, 0.25);
+  border: 1px solid rgba(215, 206, 185, 0.25);
   border-radius: 10px;
   padding: 14px;
-  background: rgba(5, 5, 5, 0.85);
+  background: rgba(23, 24, 28, 0.85);
   margin-top: 12px;
 }
 
@@ -1340,7 +1340,7 @@ body {
 
 .progress-track {
   height: 6px;
-  background: rgba(57, 255, 20, 0.15);
+  background: rgba(215, 206, 185, 0.15);
   border-radius: 999px;
   overflow: hidden;
   margin-top: 6px;
@@ -1369,13 +1369,13 @@ body {
 }
 
 .memory-history-item {
-  border: 1px solid rgba(57, 255, 20, 0.15);
+  border: 1px solid rgba(215, 206, 185, 0.15);
   border-radius: 10px;
   padding: 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
 }
 
 .memory-history-title {
@@ -1399,11 +1399,11 @@ body {
 }
 
 .graph-link-button {
-  border: 1px solid rgba(57, 255, 20, 0.4);
+  border: 1px solid rgba(215, 206, 185, 0.4);
   padding: 10px 18px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
-  background: rgba(57, 255, 20, 0.15);
+  background: rgba(215, 206, 185, 0.15);
   color: var(--text-primary);
   text-decoration: none;
   display: inline-flex;
@@ -1423,9 +1423,9 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
   padding: 16px;
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   border-radius: 12px;
-  background: rgba(5, 5, 5, 0.75);
+  background: rgba(23, 24, 28, 0.75);
   margin-bottom: 24px;
 }
 
@@ -1439,13 +1439,13 @@ body {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.3em;
-  color: rgba(158, 252, 155, 0.7);
+  color: rgba(215, 206, 185, 0.7);
 }
 
 .control-group input[type='text'],
 .control-group input[type='number'] {
-  background: rgba(5, 5, 5, 0.6);
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  background: rgba(23, 24, 28, 0.6);
+  border: 1px solid rgba(215, 206, 185, 0.3);
   color: var(--text-primary);
   padding: 10px;
   font-family: inherit;
@@ -1458,7 +1458,7 @@ body {
 }
 
 .toggle-chip {
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  border: 1px solid rgba(215, 206, 185, 0.3);
   padding: 6px 12px;
   font-size: 12px;
   letter-spacing: 0.2em;
@@ -1473,7 +1473,7 @@ body {
 
 .toggle-chip.active {
   border-color: var(--neon);
-  background: rgba(57, 255, 20, 0.1);
+  background: rgba(215, 206, 185, 0.1);
   opacity: 1;
 }
 
@@ -1489,9 +1489,9 @@ body {
 }
 
 .graph-panel {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   border-radius: 12px;
-  background: rgba(5, 5, 5, 0.8);
+  background: rgba(23, 24, 28, 0.8);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -1499,9 +1499,9 @@ body {
 }
 
 .graph-document-card {
-  border: 1px solid rgba(57, 255, 20, 0.25);
+  border: 1px solid rgba(215, 206, 185, 0.25);
   border-radius: 12px;
-  background: rgba(5, 5, 5, 0.75);
+  background: rgba(23, 24, 28, 0.75);
   padding: 16px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
 }
@@ -1520,7 +1520,7 @@ body {
   font-size: 12px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(158, 252, 155, 0.8);
+  color: rgba(215, 206, 185, 0.8);
 }
 
 .graph-node-list,
@@ -1538,10 +1538,10 @@ body {
 
 .graph-node-card,
 .graph-edge-row {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   border-radius: 10px;
   padding: 12px;
-  background: rgba(5, 5, 5, 0.7);
+  background: rgba(23, 24, 28, 0.7);
 }
 
 .graph-node-pill {
@@ -1569,7 +1569,7 @@ body {
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(158, 252, 155, 0.65);
+  color: rgba(215, 206, 185, 0.65);
 }
 
 .graph-node-card dd {
@@ -1606,8 +1606,8 @@ body {
 }
 
 .graph-controls-stack input[type='text'] {
-  background: rgba(5, 5, 5, 0.6);
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  background: rgba(23, 24, 28, 0.6);
+  border: 1px solid rgba(215, 206, 185, 0.3);
   color: var(--text-primary);
   padding: 8px;
   font-family: inherit;
@@ -1620,7 +1620,7 @@ body {
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(158, 252, 155, 0.7);
+  color: rgba(215, 206, 185, 0.7);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1633,10 +1633,10 @@ body {
 }
 
 .graph-canvas {
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  border: 1px solid rgba(215, 206, 185, 0.3);
   border-radius: 16px;
   padding: 12px;
-  background: #000;
+  background: #17181c;
   box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.45), 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
@@ -1660,7 +1660,7 @@ body {
 }
 
 .graph-metric {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   border-radius: 8px;
   padding: 10px;
   text-align: center;
@@ -1671,7 +1671,7 @@ body {
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(158, 252, 155, 0.6);
+  color: rgba(215, 206, 185, 0.6);
 }
 
 .graph-metric strong {
@@ -1681,10 +1681,10 @@ body {
 }
 
 .graph-section-card {
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  border: 1px solid rgba(215, 206, 185, 0.2);
   border-radius: 8px;
   padding: 12px;
-  background: rgba(5, 5, 5, 0.7);
+  background: rgba(23, 24, 28, 0.7);
 }
 
 .graph-section-card header {
@@ -1704,7 +1704,7 @@ body {
 }
 
 .graph-section-card li {
-  border-top: 1px solid rgba(57, 255, 20, 0.15);
+  border-top: 1px solid rgba(215, 206, 185, 0.15);
   padding-top: 6px;
 }
 
@@ -1712,7 +1712,7 @@ body {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background: #000;
+  background: #17181c;
   color: #f4fff7;
   font-family: var(--font-mono);
 }
@@ -1733,13 +1733,13 @@ body {
 .login-video-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(23, 24, 28, 0.45);
 }
 
 .login-video-gradient {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at top, rgba(57, 255, 20, 0.15), rgba(0, 0, 0, 0.65) 55%);
+  background: radial-gradient(circle at top, rgba(215, 206, 185, 0.25), rgba(23, 24, 28, 0.85) 55%);
 }
 
 .login-content {
@@ -1770,7 +1770,7 @@ body {
   letter-spacing: 0.4em;
   font-size: 11px;
   text-transform: uppercase;
-  color: rgba(57, 255, 20, 0.8);
+  color: rgba(215, 206, 185, 0.8);
 }
 
 .google-signin-btn {
@@ -1847,7 +1847,7 @@ body {
 
 .onboarding-progress-value {
   height: 100%;
-  background: rgba(57, 255, 20, 0.9);
+  background: rgba(215, 206, 185, 0.9);
   transition: width 0.3s ease;
 }
 
@@ -1869,7 +1869,7 @@ body {
 
 .onboarding-input:focus {
   outline: none;
-  border-color: rgba(57, 255, 20, 0.9);
+  border-color: rgba(215, 206, 185, 0.9);
 }
 
 .onboarding-actions {
@@ -1890,8 +1890,8 @@ body {
 }
 
 .onboarding-btn.primary {
-  background: rgba(57, 255, 20, 0.2);
-  border-color: rgba(57, 255, 20, 0.5);
+  background: rgba(215, 206, 185, 0.2);
+  border-color: rgba(215, 206, 185, 0.5);
   color: #f4fff7;
 }
 
@@ -1918,7 +1918,7 @@ body {
 }
 
 .graph-node-pill.subtle {
-  color: rgba(158, 252, 155, 0.7);
+  color: rgba(215, 206, 185, 0.7);
 }
 
 .memory-history-actions {
@@ -1929,7 +1929,7 @@ body {
 }
 
 .memory-status-chip {
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  border: 1px solid rgba(215, 206, 185, 0.3);
   padding: 4px 8px;
   border-radius: 999px;
   font-size: 10px;
@@ -1955,7 +1955,7 @@ body {
   margin-top: 6px;
   font-size: 11px;
   text-transform: uppercase;
-  color: rgba(57, 255, 20, 0.7);
+  color: rgba(215, 206, 185, 0.7);
   letter-spacing: 0.3em;
 }
 

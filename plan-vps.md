@@ -1,6 +1,6 @@
 # VPS Deployment Plan
 
-This guide outlines how to containerize Pluto’s services and run them on a single low-cost VPS (e.g., Hetzner CX21, DO $8 droplet, etc.). The stack will live behind an Nginx/Caddy reverse proxy with Docker Compose orchestrating all containers.
+This guide outlines how to containerize Eclipsn’s services and run them on a single low-cost VPS (e.g., Hetzner CX21, DO $8 droplet, etc.). The stack will live behind an Nginx/Caddy reverse proxy with Docker Compose orchestrating all containers.
 
 ---
 
@@ -61,7 +61,7 @@ This guide outlines how to containerize Pluto’s services and run them on a sin
    ```yaml
    version: "3.9"
    networks:
-     pluto-net:
+     Eclipsn-net:
        driver: bridge
 
    services:
@@ -71,25 +71,25 @@ This guide outlines how to containerize Pluto’s services and run them on a sin
        env_file: ./infrastructure/env/postgres.env
        volumes:
          - postgres_data:/var/lib/postgresql/data
-       networks: [pluto-net]
+       networks: [Eclipsn-net]
 
      gateway:
        build: ./gateway
        env_file: ./gateway/.env.production
        depends_on: [postgres, brain]
-       networks: [pluto-net]
+       networks: [Eclipsn-net]
 
      brain:
        build: ./brain
        env_file: ./brain/.env.production
        depends_on: [postgres]
-       networks: [pluto-net]
+       networks: [Eclipsn-net]
 
      frontend:
        build: ./frontend
        env_file: ./frontend/.env.production
        depends_on: [gateway]
-       networks: [pluto-net]
+       networks: [Eclipsn-net]
 
      proxy:
        image: caddy:2
@@ -102,7 +102,7 @@ This guide outlines how to containerize Pluto’s services and run them on a sin
          - caddy_data:/data
          - caddy_config:/config
        depends_on: [frontend, gateway]
-       networks: [pluto-net]
+       networks: [Eclipsn-net]
 
    volumes:
      postgres_data:
@@ -112,15 +112,15 @@ This guide outlines how to containerize Pluto’s services and run them on a sin
 
    - `Caddyfile` example:
      ```
-     pluto.example.com {
+     Eclipsn.example.com {
        reverse_proxy frontend:3000
      }
 
-     api.pluto.example.com {
+     api.Eclipsn.example.com {
        reverse_proxy gateway:4000
      }
 
-     brain.pluto.example.com {
+     brain.Eclipsn.example.com {
        reverse_proxy brain:8000
      }
      ```
@@ -166,16 +166,16 @@ This guide outlines how to containerize Pluto’s services and run them on a sin
 
 1. **Clone repo**
    ```bash
-   git clone https://github.com/you/pluto.git
-   cd pluto
+   git clone https://github.com/you/Eclipsn.git
+   cd Eclipsn
    ```
 
 2. **Copy prod env files**
    ```bash
-   scp frontend/.env.production vps:~/pluto/frontend/.env.production
-   scp gateway/.env.production vps:~/pluto/gateway/.env.production
-   scp brain/.env.production vps:~/pluto/brain/.env.production
-   scp infrastructure/env/postgres.env vps:~/pluto/infrastructure/env/postgres.env
+   scp frontend/.env.production vps:~/Eclipsn/frontend/.env.production
+   scp gateway/.env.production vps:~/Eclipsn/gateway/.env.production
+   scp brain/.env.production vps:~/Eclipsn/brain/.env.production
+   scp infrastructure/env/postgres.env vps:~/Eclipsn/infrastructure/env/postgres.env
    ```
 
 3. **Build & run**
@@ -188,7 +188,7 @@ This guide outlines how to containerize Pluto’s services and run them on a sin
 4. **Database migration**
    - From host:
      ```bash
-     docker compose exec postgres psql -U pluto -d pluto -f /app/db/schema.sql
+     docker compose exec postgres psql -U Eclipsn -d Eclipsn -f /app/db/schema.sql
      ```
      (Mount schema file or run from local machine using `psql $DATABASE_URL -f db/schema.sql`.)
 
@@ -200,7 +200,7 @@ This guide outlines how to containerize Pluto’s services and run them on a sin
    - Optionally add `promtail` + Grafana/Prometheus stack or use a lightweight alternative (Vector/Dozzle).
 
 6. **TLS & domains**
-   - Point DNS `A` records (`pluto.example.com`, `api.pluto.example.com`, `brain.pluto.example.com`) to the VPS IP.
+   - Point DNS `A` records (`Eclipsn.example.com`, `api.Eclipsn.example.com`, `brain.Eclipsn.example.com`) to the VPS IP.
    - Caddy auto-issues Let’s Encrypt certs. For Nginx, use Certbot.
 
 ---
@@ -210,8 +210,8 @@ This guide outlines how to containerize Pluto’s services and run them on a sin
 If you prefer building images locally and pushing to a registry:
 
 ```bash
-docker build -t ghcr.io/you/pluto-frontend:latest frontend
-docker push ghcr.io/you/pluto-frontend:latest
+docker build -t ghcr.io/you/Eclipsn-frontend:latest frontend
+docker push ghcr.io/you/Eclipsn-frontend:latest
 # repeat for gateway/brain
 ```
 
@@ -231,7 +231,7 @@ Then adjust `docker-compose.vps.yml` service definitions to `image: ghcr.io/you/
 ## 6. Checklist Before Production
 
 - [ ] All env files set with production secrets.
-- [ ] Gmail OAuth redirect URI matches `https://api.pluto.example.com/api/gmail/callback`.
+- [ ] Gmail OAuth redirect URI matches `https://api.Eclipsn.example.com/api/gmail/callback`.
 - [ ] TLS certificates verified (no mixed content).
 - [ ] Database schema applied; migrations run.
 - [ ] Backups tested.
