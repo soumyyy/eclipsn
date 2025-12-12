@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSessionContext } from '@/components/SessionProvider';
 import {
   normalizeProfileNotes,
@@ -19,15 +19,18 @@ interface ProfileModalProps {
   gmailActionPending: boolean;
 }
 
-const TABS: Array<{ id: 'profile' | 'connections' | 'notes' | 'history'; label: string }> = [
+const tabsOrder = ['profile', 'notes', 'connections', 'history'] as const;
+type TabId = (typeof tabsOrder)[number];
+
+const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'profile', label: 'Profile' },
-  { id: 'connections', label: 'Connections' },
   { id: 'notes', label: 'Notes' },
+  { id: 'connections', label: 'Connections' },
   { id: 'history', label: 'History' }
 ];
 
 export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActionPending }: ProfileModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'notes' | 'history'>('profile');
+  const [activeTab, setActiveTab] = useState<TabId>('profile');
   const [activeNoteIndex, setActiveNoteIndex] = useState<number | null>(null);
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [draftNoteText, setDraftNoteText] = useState('');
@@ -41,6 +44,8 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   const gmailLoading = loading || gmailActionPending;
   const lastUpdated = profile?.updatedAt ? new Date(profile.updatedAt).toLocaleString() : null;
   const [profileDraft, setProfileDraft] = useState<UserProfile | null>(profile);
+  const tabContentRef = useRef<HTMLDivElement | null>(null);
+  const scrollMomentumRef = useRef(0);
 
   useEffect(() => {
     if (!isEditingProfile) {
@@ -237,7 +242,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
         {fieldGroups.map((group) => (
           <section key={group.title} className="profile-section">
             <div className="profile-section-header">
-              <h3>{group.title}</h3>
+              <h4>{group.title}</h4>
             </div>
             <div className={`profile-grid ${group.title === 'Biography' ? 'stacked' : ''}`}>
               {group.fields.map((field) => {
@@ -372,7 +377,6 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
         description: gmailStatus?.connected
           ? `Signed in as ${gmailStatus.name ?? gmailStatus.email ?? 'operator'}.`
           : 'Connect Gmail to ingest threads and summaries.',
-        status: gmailStatus?.connected ? 'Online' : 'Offline',
         action: gmailStatus?.connected ? 'Logout' : 'Connect',
         onClick: onGmailAction,
         loading: gmailLoading
@@ -380,7 +384,6 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       {
         title: 'Bespoke memory',
         description: 'Upload markdown notes and files.',
-        status: 'Ready',
         action: 'Open',
         onClick: onOpenBespoke,
         loading: false
@@ -397,9 +400,6 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
               </div>
             </div>
             <div className="connection-actions">
-              <span className={`connection-status ${card.status === 'Online' ? 'online' : card.status === 'Offline' ? 'offline' : 'ready'}`}>
-                {card.status}
-              </span>
               <button type="button" onClick={card.onClick} disabled={card.loading} className="connection-manage">
                 {card.action}
               </button>
@@ -438,8 +438,47 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
 
   const renderActiveContent = () => {
     if (activeTab === 'connections') return renderConnectionsContent();
+    if (activeTab === 'notes') return renderNotesContent();
     if (activeTab === 'history') return renderHistoryContent();
     return renderProfileContent();
+  };
+
+  const handleTabScroll = (event: React.WheelEvent<HTMLDivElement>) => {
+    const container = tabContentRef.current;
+    if (!container) return;
+    const { deltaY } = event;
+    const canScrollUp = container.scrollTop > 0;
+    const canScrollDown = container.scrollTop + container.clientHeight < container.scrollHeight - 1;
+    const idx = tabsOrder.indexOf(activeTab);
+    const threshold = 180;
+
+    if (deltaY > 0 && !canScrollDown) {
+      scrollMomentumRef.current += deltaY;
+      if (scrollMomentumRef.current >= threshold && idx < tabsOrder.length - 1) {
+        event.preventDefault();
+        scrollMomentumRef.current = 0;
+        setActiveTab(tabsOrder[idx + 1]);
+        requestAnimationFrame(() => {
+          if (tabContentRef.current) {
+            tabContentRef.current.scrollTop = 0;
+          }
+        });
+      }
+    } else if (deltaY < 0 && !canScrollUp) {
+      scrollMomentumRef.current += deltaY;
+      if (scrollMomentumRef.current <= -threshold && idx > 0) {
+        event.preventDefault();
+        scrollMomentumRef.current = 0;
+        setActiveTab(tabsOrder[idx - 1]);
+        requestAnimationFrame(() => {
+          if (tabContentRef.current) {
+            tabContentRef.current.scrollTop = tabContentRef.current.scrollHeight;
+          }
+        });
+      }
+    } else {
+      scrollMomentumRef.current = 0;
+    }
   };
 
   return (
@@ -447,7 +486,6 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       <div className="profile-modal" onClick={(evt) => evt.stopPropagation()}>
         <div className="profile-modal-header">
           <div>
-            <p className="profile-name">{profile?.preferredName ?? profile?.fullName ?? 'User profile'}</p>
             {profile && (profile.role || profile.company) && (
               <p className="text-muted">
                 {[profile.role, profile.company].filter(Boolean).join(' @ ')}
@@ -468,7 +506,9 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
               </button>
             ))}
           </aside>
-          <div className="profile-tab-content">{renderActiveContent()}</div>
+          <div className="profile-tab-content" ref={tabContentRef} onWheel={handleTabScroll}>
+            {renderActiveContent()}
+          </div>
         </div>
         <div className="profile-modal-footer">
         <div className="profile-header-actions">
@@ -483,7 +523,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
               </>
             ) : (
               <button type="button" className="profile-edit-btn primary" onClick={() => setIsEditingProfile(true)}>
-                Edit profile
+                Edit
               </button>
             )}
           </div>
