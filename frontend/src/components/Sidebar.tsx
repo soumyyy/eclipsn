@@ -3,19 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BespokeMemoryModal } from './BespokeMemoryModal';
 import { ProfileModal } from './ProfileModal';
-import {
-  cacheProfileLocally,
-  fetchSessionSnapshot,
-  type GmailStatus,
-  type SessionSnapshot,
-  type UserProfile
-} from '@/lib/session';
+import { useSessionContext } from '@/components/SessionProvider';
+import type { GmailStatus, UserProfile } from '@/lib/session';
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
 export function Sidebar() {
-  const [session, setSession] = useState<SessionSnapshot | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(true);
+  const { session, loading: sessionLoading, refreshSession, updateProfile, updateGmailStatus } = useSessionContext();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [isBespokeMemoryModalOpen, setIsBespokeMemoryModalOpen] = useState(false);
@@ -28,62 +22,22 @@ export function Sidebar() {
     setLocalIdentity({ name });
   }, []);
 
-  const refreshSession = useCallback(
-    async (initial = false) => {
-      if (initial) {
-        setSessionLoading(true);
-      }
-      try {
-        const snapshot = await fetchSessionSnapshot();
-        setSession(snapshot);
-        cacheProfileLocally(snapshot.profile);
-      } catch (error) {
-        console.error('Failed to load session', error);
-        if (initial) {
-          setSession(null);
-        }
-      } finally {
-        if (initial) {
-          setSessionLoading(false);
-        }
-      }
-    },
-    []
-  );
-
   useEffect(() => {
-    let cancelled = false;
-    refreshSession(true);
-    const intervalId = setInterval(() => {
-      if (!cancelled) {
-        refreshSession(false);
-      }
-    }, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(intervalId);
-    };
-  }, [refreshSession]);
+    if (isProfileOpen) {
+      refreshSession();
+    }
+  }, [isProfileOpen, refreshSession]);
 
   const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
   const profile: UserProfile | null = session?.profile ?? null;
   const gmailLoading = sessionLoading || disconnecting;
 
-  const handleProfileUpdated = (nextProfile: UserProfile | null) => {
-    setSession((prev) => {
-      if (!prev) {
-        return {
-          gmail: { connected: false },
-          profile: nextProfile
-        };
-      }
-      return {
-        ...prev,
-        profile: nextProfile
-      };
-    });
-    cacheProfileLocally(nextProfile);
-  };
+  const handleProfileUpdated = useCallback(
+    (nextProfile: UserProfile | null) => {
+      updateProfile(nextProfile);
+    },
+    [updateProfile]
+  );
 
   async function handleGmailAction() {
     if (gmailStatus.connected) {
@@ -94,13 +48,7 @@ export function Sidebar() {
           method: 'POST'
         });
         if (!response.ok) throw new Error('Failed to disconnect Gmail');
-        setSession((prev) => {
-          const nextProfile = prev?.profile ?? null;
-          return {
-            gmail: { connected: false },
-            profile: nextProfile
-          };
-        });
+        updateGmailStatus({ connected: false });
         if (typeof window !== 'undefined') {
           localStorage.removeItem('plutoOnboarded');
           window.location.href = '/login';
@@ -112,6 +60,16 @@ export function Sidebar() {
       }
     } else {
       window.open(connectUrl, '_blank', 'width=520,height=620');
+      const poll = setInterval(async () => {
+        try {
+          const snapshot = await refreshSession();
+          if (snapshot?.gmail.connected) {
+            clearInterval(poll);
+          }
+        } catch {
+          // swallow
+        }
+      }, 2500);
     }
   }
 
