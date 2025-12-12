@@ -13,12 +13,13 @@ const QUESTIONS: OnboardingQuestion[] = [
     id: 'fullName',
     label: 'What should Pluto call you?',
     placeholder: 'Full name or callsign',
-    helperText: 'We use this to personalize responses and emails.'
+    helperText: 'Optional — we use this to personalize responses.'
   },
   {
     id: 'personalNote',
     label: 'Anything specific you’d like Pluto to remember?',
-    placeholder: 'e.g. Favorite tone, dietary note, VIP clients'
+    placeholder: 'e.g. Favorite tone, dietary note, VIP clients',
+    helperText: 'Optional, but helps Pluto stay in character for you.'
   }
 ];
 
@@ -38,15 +39,26 @@ export default function LoginPage() {
     let cancelled = false;
     async function checkExistingSession() {
       if (typeof window === 'undefined') return;
-      const hasProfile = localStorage.getItem('plutoOnboarded') === 'true';
+      const hasLocalProfile = localStorage.getItem('plutoOnboarded') === 'true';
       try {
-        const response = await fetch(`${GATEWAY_URL}/api/gmail/status`);
-        const data = response.ok ? await response.json() : { connected: false };
-        if (hasProfile && data.connected && !cancelled) {
+        const [gmailResponse, profileResponse] = await Promise.all([
+          fetch(`${GATEWAY_URL}/api/gmail/status`),
+          fetch(`${GATEWAY_URL}/api/profile`)
+        ]);
+        const gmailData = gmailResponse.ok ? await gmailResponse.json() : { connected: false };
+        const profileData = profileResponse.ok ? await profileResponse.json() : { profile: null };
+        if (gmailData.connected && profileData.profile && !cancelled) {
+          localStorage.setItem('plutoProfileName', profileData.profile.fullName ?? '');
+          localStorage.setItem('plutoProfileNote', profileData.profile.customData?.personalNote ?? '');
+          localStorage.setItem('plutoOnboarded', 'true');
+          router.replace('/');
+          return;
+        }
+        if (hasLocalProfile && gmailData.connected && !cancelled) {
           router.replace('/');
         }
       } catch {
-        if (hasProfile && !cancelled) {
+        if (hasLocalProfile && !cancelled) {
           router.replace('/');
         }
       }
@@ -112,18 +124,43 @@ export default function LoginPage() {
     setCurrentStep((prev) => Math.max(prev - 1, 0));
   }, []);
 
-  const handleFinish = useCallback(() => {
+  const handleFinish = useCallback(async () => {
+    if (completing) return;
     setCompleting(true);
-    setTimeout(() => {
+    try {
+      const payload: Record<string, unknown> = {};
+      if (responses.fullName) {
+        payload.fullName = responses.fullName;
+        payload.preferredName = responses.fullName;
+      }
+      if (responses.personalNote) {
+        payload.customData = {
+          notes: [
+            {
+              text: responses.personalNote,
+              timestamp: new Date().toISOString()
+            }
+          ]
+        };
+      }
+      if (Object.keys(payload).length > 0) {
+        await fetch(`${GATEWAY_URL}/api/profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).catch(() => undefined);
+      }
       if (typeof window !== 'undefined') {
         localStorage.setItem('plutoOnboarded', 'true');
-        localStorage.setItem('plutoProfileName', responses.fullName ?? '');
-        localStorage.setItem('plutoProfileNote', responses.personalNote ?? '');
+        if (responses.fullName) {
+          localStorage.setItem('plutoProfileName', responses.fullName);
+        }
       }
       setStage('success');
+    } finally {
       setCompleting(false);
-    }, 800);
-  }, [responses]);
+    }
+  }, [completing, responses]);
 
   const handleEnterApp = useCallback(() => {
     router.push('/');

@@ -55,12 +55,7 @@ export function OnboardingPrompt({
         <button type="button" className="onboarding-btn secondary" onClick={onBack} disabled={currentStep === 0}>
           Back
         </button>
-        <button
-          type="button"
-          className="onboarding-btn primary"
-          onClick={isLastStep ? onFinish : onNext}
-          disabled={!responses[currentQuestion.id]}
-        >
+        <button type="button" className="onboarding-btn primary" onClick={isLastStep ? onFinish : onNext}>
           {isLastStep ? 'Finish' : 'Next'}
         </button>
       </div>
