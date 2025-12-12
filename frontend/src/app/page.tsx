@@ -94,12 +94,13 @@ export default function ChatPage() {
   const sidebar = <Sidebar />;
   return (
     <ChatLayout sidebar={sidebar}>
-      <>
+      <div className="chat-view">
         <div className="chat-stream">
           {messages.length === 0 ? (
-            <p className="message-bubble assistant">
-              &gt; Awaiting input… Pluto will synthesize context from Gmail and memory banks when available.
-            </p>
+            <div className="idle-state">
+              <div className="idle-beacon" />
+              <p className="idle-text">Awaiting transmission</p>
+            </div>
           ) : (
             messages.map((message) => (
               <MessageBubble
@@ -125,7 +126,7 @@ export default function ChatPage() {
             {isSending ? 'SENDING…' : 'SEND'}
           </button>
         </form>
-      </>
+      </div>
     </ChatLayout>
   );
 }

@@ -306,13 +306,13 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
         <div className="profile-modal-header">
           <div>
             <p className="profile-name">Bespoke Memory</p>
-            <p
+            {/* <p
               className={`gmail-state ${gmailStatus.connected ? 'connected' : 'disconnected'}`}
             >
               {gmailStatus.connected
                 ? `Gmail connected as ${gmailStatus.name ?? gmailStatus.email ?? 'operator'}`
                 : 'Gmail disconnected — connect via profile panel'}
-            </p>
+            </p> */}
           </div>
         </div>
         <div className="profile-modal-body">
