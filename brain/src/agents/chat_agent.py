@@ -36,8 +36,8 @@ class ProfileUpdateInput(BaseModel):
         note = values.get("note")
         if not field and not note:
             raise ValueError("Provide either a (field, value) pair or a note.")
-        if field and not value:
-            raise ValueError("Value is required when field is provided.")
+        if field and value is None:
+            values["value"] = ""
         return values
 
 logger = logging.getLogger(__name__)
