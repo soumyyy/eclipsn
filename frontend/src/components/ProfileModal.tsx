@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSessionContext } from '@/components/SessionProvider';
 import {
   normalizeProfileNotes,
@@ -32,10 +32,20 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   const [draftNoteText, setDraftNoteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const { session, loading, updateProfile } = useSessionContext();
   const profile: UserProfile | null = session?.profile ?? null;
   const gmailStatus: GmailStatus | null = session?.gmail ?? null;
   const gmailLoading = loading || gmailActionPending;
+  const lastUpdated = profile?.updatedAt ? new Date(profile.updatedAt).toLocaleString() : null;
+  const [profileDraft, setProfileDraft] = useState<UserProfile | null>(profile);
+
+  useEffect(() => {
+    if (!isEditingProfile) {
+      setProfileDraft(profile);
+    }
+  }, [profile, isEditingProfile]);
 
   const normalizedNotes: ProfileNote[] = normalizeProfileNotes(profile?.customData?.notes ?? []);
 
@@ -49,47 +59,93 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       value !== ''
   );
 
-  const baseSections = [
+  type EditableFieldKey =
+    | 'fullName'
+    | 'preferredName'
+    | 'contactEmail'
+    | 'phone'
+    | 'timezone'
+    | 'company'
+    | 'role'
+    | 'biography';
+
+  const fieldGroups: Array<{
+    title: string;
+    fields: Array<{ key: EditableFieldKey; label: string; placeholder?: string; type?: 'textarea' }>;
+  }> = [
     {
       title: 'Identity',
-      items: [
-        { label: 'Full name', value: profile?.fullName },
-        { label: 'Preferred name', value: profile?.preferredName }
+      fields: [
+        { key: 'fullName', label: 'Full name', placeholder: 'Jane Doe' },
+        { key: 'preferredName', label: 'Preferred name', placeholder: 'Callsign' }
       ]
     },
     {
       title: 'Contact',
-      items: [
-        { label: 'Contact email', value: profile?.contactEmail },
-        { label: 'Phone', value: profile?.phone },
-        { label: 'Timezone', value: profile?.timezone }
+      fields: [
+        { key: 'contactEmail', label: 'Contact email', placeholder: 'you@example.com' },
+        { key: 'phone', label: 'Phone', placeholder: '+1 555 0100' },
+        { key: 'timezone', label: 'Timezone', placeholder: 'America/Los_Angeles' }
       ]
     },
     {
       title: 'Work',
-      items: [
-        { label: 'Company', value: profile?.company },
-        { label: 'Role', value: profile?.role }
+      fields: [
+        { key: 'company', label: 'Company', placeholder: 'Company' },
+        { key: 'role', label: 'Role', placeholder: 'Founder, Operator' }
       ]
+    },
+    {
+      title: 'Biography',
+      fields: [{ key: 'biography', label: 'Bio', placeholder: 'Tell Pluto about your focus', type: 'textarea' }]
     }
   ];
 
-  const sections = baseSections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => item.value)
-    }))
-    .filter((section) => section.items.length > 0);
+  const editableKeys: EditableFieldKey[] = [
+    'fullName',
+    'preferredName',
+    'contactEmail',
+    'phone',
+    'timezone',
+    'company',
+    'role',
+    'biography'
+  ];
 
-  if (customExtras.length > 0) {
-    sections.push({
-      title: 'Custom fields',
-      items: customExtras.map(([label, value]) => ({
-        label,
-        value: typeof value === 'string' ? value : JSON.stringify(value)
-      }))
-    });
-  }
+  const handleProfileFieldChange = (key: EditableFieldKey, value: string) => {
+    setProfileDraft((prev) => ({ ...(prev ?? {}), [key]: value }));
+  };
+
+  const handleProfileSave = async () => {
+    if (!profileDraft) return;
+    setSavingProfile(true);
+    try {
+      const payload: Record<string, unknown> = {};
+      editableKeys.forEach((key) => {
+        payload[key] = profileDraft[key] ?? '';
+      });
+      const response = await fetch(`${GATEWAY_URL}/api/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update profile');
+      }
+      const data = await response.json();
+      updateProfile(data.profile ?? null);
+      setIsEditingProfile(false);
+    } catch (err) {
+      console.error('Profile update failed', err);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleProfileCancel = () => {
+    setProfileDraft(profile);
+    setIsEditingProfile(false);
+  };
 
   const handleNoteClick = (index: number) => {
     if (editingNoteIndex !== null) {
@@ -174,28 +230,64 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
     if (!profile) {
       return <p className="text-muted">Share personal details and Pluto will remember them.</p>;
     }
+    const draft = profileDraft ?? profile;
     return (
       <div className="profile-tab-stack">
-        {profile.biography && (
-          <section>
-            <h3>Biography</h3>
-            <p className="text-muted">{profile.biography}</p>
+        {fieldGroups.map((group) => (
+          <section key={group.title} className="profile-section">
+            <div className="profile-section-header">
+              <h3>{group.title}</h3>
+            </div>
+            <div className={`profile-grid ${group.title === 'Biography' ? 'stacked' : ''}`}>
+              {group.fields.map((field) => {
+                const value = (draft as Record<string, unknown>)?.[field.key];
+                const displayValue =
+                  typeof value === 'string' && value.trim().length > 0 ? value : '—';
+                return (
+                  <div className={`profile-field ${isEditingProfile ? 'editing' : ''}`} key={`${group.title}-${field.key}`}>
+                    <span>{field.label}</span>
+                    {isEditingProfile ? (
+                      field.type === 'textarea' ? (
+                        <textarea
+                          value={typeof value === 'string' ? value : ''}
+                          placeholder={field.placeholder}
+                          onChange={(event) => handleProfileFieldChange(field.key, event.target.value)}
+                          className="profile-field-input textarea"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={typeof value === 'string' ? value : ''}
+                          placeholder={field.placeholder}
+                          onChange={(event) => handleProfileFieldChange(field.key, event.target.value)}
+                          className="profile-field-input"
+                        />
+                      )
+                    ) : (
+                      <strong>{displayValue}</strong>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </section>
-        )}
+        ))}
 
-        {sections.map((section) => (
-          <section key={section.title}>
-            <h3>{section.title}</h3>
+        {customExtras.length > 0 && (
+          <section className="profile-section">
+            <div className="profile-section-header">
+              <h3>Custom fields</h3>
+            </div>
             <div className="profile-grid">
-              {section.items.map((item) => (
-                <div className="profile-field" key={item.label}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
+              {customExtras.map(([label, value]) => (
+                <div className="profile-field" key={label}>
+                  <span>{label}</span>
+                  <strong>{typeof value === 'string' ? value : JSON.stringify(value)}</strong>
                 </div>
               ))}
             </div>
           </section>
-        ))}
+        )}
 
         {normalizedNotes.length > 0 && (
           <section>
@@ -269,27 +361,46 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   };
 
   const renderConnectionsContent = () => {
+    const cards = [
+      {
+        title: 'Gmail',
+        description: gmailStatus?.connected
+          ? `Signed in as ${gmailStatus.name ?? gmailStatus.email ?? 'operator'}.`
+          : 'Connect Gmail to ingest threads and summaries.',
+        status: gmailStatus?.connected ? 'Online' : 'Offline',
+        action: gmailStatus?.connected ? 'Logout' : 'Connect',
+        onClick: onGmailAction,
+        loading: gmailLoading
+      },
+      {
+        title: 'Bespoke memory',
+        description: 'Upload markdown notes and files.',
+        status: 'Ready',
+        action: 'Open',
+        onClick: onOpenBespoke,
+        loading: false
+      }
+    ];
     return (
-      <div className="profile-tab-stack">
-        <section>
-          <h3>Gmail</h3>
-          <p className="text-muted">
-            {gmailStatus?.connected
-              ? `Connected as ${gmailStatus.name ?? gmailStatus.email ?? 'operator'}.`
-              : 'Connect your Gmail account to ingest threads and bespoke context.'}
-          </p>
-          <button type="button" className="profile-quick-btn" onClick={onGmailAction} disabled={gmailLoading}>
-            <span className="quick-label">Gmail</span>
-            <strong>{gmailStatus?.connected ? 'Disconnect' : 'Connect'}</strong>
-          </button>
-        </section>
-        <section>
-          <h3>Bespoke Memory</h3>
-          <button type="button" className="profile-quick-btn" onClick={onOpenBespoke}>
-            <span className="quick-label">Bespoke memory</span>
-            <strong>Open modal</strong>
-          </button>
-        </section>
+      <div className="connection-list">
+        {cards.map((card) => (
+          <div className="connection-item" key={card.title}>
+            <div className="connection-meta">
+              <div>
+                <p className="connection-name">{card.title}</p>
+                <p className="connection-desc">{card.description}</p>
+              </div>
+            </div>
+            <div className="connection-actions">
+              <span className={`connection-status ${card.status === 'Online' ? 'online' : card.status === 'Offline' ? 'offline' : 'ready'}`}>
+                {card.status}
+              </span>
+              <button type="button" onClick={card.onClick} disabled={card.loading} className="connection-manage">
+                {card.action}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     );
   };
@@ -331,11 +442,18 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       <div className="profile-modal" onClick={(evt) => evt.stopPropagation()}>
         <div className="profile-modal-header">
           <div>
-            {profile?.role && profile?.company && (
+            <p className="profile-name">{profile?.preferredName ?? profile?.fullName ?? 'User profile'}</p>
+            {profile && (profile.role || profile.company) && (
               <p className="text-muted">
-                {profile.role} @ {profile.company}
+                {[profile.role, profile.company].filter(Boolean).join(' @ ')}
               </p>
             )}
+            {/* {profile?.contactEmail && <p className="text-muted profile-contact-line">{profile.contactEmail}</p>} */}
+            {/* {lastUpdated && (
+              // <small className="text-muted profile-contact-line">
+              //   Updated {lastUpdated}
+              // </small>
+            )} */}
           </div>
         </div>
         <div className="profile-modal-body-grid">
@@ -354,6 +472,22 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
           <div className="profile-tab-content">{renderActiveContent()}</div>
         </div>
         <div className="profile-modal-footer">
+        <div className="profile-header-actions">
+            {isEditingProfile ? (
+              <>
+                <button type="button" className="profile-edit-btn secondary" onClick={handleProfileCancel} disabled={savingProfile}>
+                  Cancel
+                </button>
+                <button type="button" className="profile-edit-btn primary" onClick={handleProfileSave} disabled={savingProfile}>
+                  {savingProfile ? 'Saving…' : 'Save changes'}
+                </button>
+              </>
+            ) : (
+              <button type="button" className="profile-edit-btn primary" onClick={() => setIsEditingProfile(true)}>
+                Edit profile
+              </button>
+            )}
+          </div>
           <button className="profile-done-btn" type="button" onClick={onClose}>
             Done
           </button>

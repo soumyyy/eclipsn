@@ -22,11 +22,13 @@ This document captures the current state of the project, major features implemen
 ### Gmail Integration
 - OAuth + token refresh (Gmail).
 - Thread ingestion (`fetchRecentThreads`) + embedding storage (`gmail_thread_embeddings`).
+- `/api/gmail/threads` now defaults to a 48h lookback window (override via `?hours=`) and returns meta counts (total/important/promotions + window hours) so “recent email” summaries always have enough context.
 - Semantic search endpoint returns structured JSON (subject, snippet, sender, link, timestamp).
 - Brain merges Gmail snippets with bespoke memories via Reciprocal Rank Fusion (`search_memories_tool`).
 - Full-thread detail:
   - Gateway caches bodies in `gmail_thread_bodies`.
   - Agent tool `gmail_thread_detail` fetches full content on demand (handles HTML/plain text extraction).
+- System prompt instructs the agent: if `gmail_inbox` returns empty, acknowledge it and suggest reconnecting Gmail or checking filters instead of replying with a blunt “no emails.”
 
 ### URL Auto-Fetch
 - Messages with URLs trigger automatic Tavily extraction.
@@ -49,11 +51,13 @@ This document captures the current state of the project, major features implemen
 - `gmail_thread_detail`: fetch full Gmail content.
 - `profile_update`: structured profile updates.
 - URL auto-context (pre-processing step, not a tool) uses Tavily extract.
+- Frontend renders Markdown + math responses via `react-markdown`, `remark-gfm`, `remark-math`, and `rehype-katex`. Chat UI uses a shared `SessionProvider` for Gmail/profile state, has a fixed bottom input bar, and an animated idle placeholder.
 
 ## 5. Operational Notes
 - Indexer runs asynchronously inside `/memory/index` (AsyncPG + OpenAI embeddings). Cache invalidation ensures FAISS files are rebuilt cleanly after deletes.
 - Gateway uses `multer` for uploads, merges custom data, and now infers `batch_name` from the folder path.
 - Tavily extracts and general search share the same API key (`TAVILY_API_KEY`).
+- Profile notes/custom data normalization is centralized (gateway + frontend + brain share helpers) so deleting/updating notes behaves consistently.
 - Supabase/Postgres schema changes tracked via `db/schema.sql` and individual migrations in `db/migrations/`.
 
 ## 6. Next Steps Candidates

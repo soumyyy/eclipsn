@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BespokeMemoryModal } from './BespokeMemoryModal';
 import { ProfileModal } from './ProfileModal';
+import { ModalPortal } from './ModalPortal';
 import { useSessionContext } from '@/components/SessionProvider';
 import type { GmailStatus } from '@/lib/session';
 import type { UserProfile } from '@/lib/profile';
@@ -105,15 +106,19 @@ export function Sidebar() {
         </section>
       </div>
       {isProfileOpen && (
-        <ProfileModal
-          onGmailAction={handleGmailAction}
-          onOpenBespoke={() => setIsBespokeMemoryModalOpen(true)}
-          onClose={() => setIsProfileOpen(false)}
-          gmailActionPending={disconnecting}
-        />
+        <ModalPortal>
+          <ProfileModal
+            onGmailAction={handleGmailAction}
+            onOpenBespoke={() => setIsBespokeMemoryModalOpen(true)}
+            onClose={() => setIsProfileOpen(false)}
+            gmailActionPending={disconnecting}
+          />
+        </ModalPortal>
       )}
       {isBespokeMemoryModalOpen && (
-        <BespokeMemoryModal onClose={() => setIsBespokeMemoryModalOpen(false)} />
+        <ModalPortal>
+          <BespokeMemoryModal onClose={() => setIsBespokeMemoryModalOpen(false)} />
+        </ModalPortal>
       )}
     </>
   );

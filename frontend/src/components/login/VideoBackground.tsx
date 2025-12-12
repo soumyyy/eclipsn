@@ -6,8 +6,8 @@ interface VideoBackgroundProps {
 }
 
 export function VideoBackground({
-  videoSrc = 'https://cdn.coverr.co/videos/coverr-flying-through-space-9991/1080p.mp4',
-  poster
+  videoSrc = '/PlutoBg.mp4',
+  poster = 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=80'
 }: VideoBackgroundProps) {
   return (
     <div className="login-video-wrapper">

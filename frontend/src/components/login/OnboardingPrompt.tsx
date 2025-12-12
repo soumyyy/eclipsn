@@ -36,28 +36,31 @@ export function OnboardingPrompt({
 
   return (
     <div className="onboarding-card">
-      <div className="onboarding-progress">
-        <div className="onboarding-progress-value" style={{ width: `${progress}%` }} />
-      </div>
-      <p className="onboarding-step">
-        Step {currentStep + 1} of {questions.length}
-      </p>
-      <h2>{currentQuestion.label}</h2>
-      {currentQuestion.helperText && <p className="text-muted">{currentQuestion.helperText}</p>}
-      <input
-        type="text"
-        className="onboarding-input"
-        placeholder={currentQuestion.placeholder}
-        value={responses[currentQuestion.id] ?? ''}
-        onChange={(event) => onResponseChange(currentQuestion.id, event.target.value)}
-      />
-      <div className="onboarding-actions">
-        <button type="button" className="onboarding-btn secondary" onClick={onBack} disabled={currentStep === 0}>
-          Back
-        </button>
-        <button type="button" className="onboarding-btn primary" onClick={isLastStep ? onFinish : onNext}>
-          {isLastStep ? 'Finish' : 'Next'}
-        </button>
+      <div className="onboarding-image" />
+      <div className="onboarding-body">
+        <div className="onboarding-progress">
+          <div className="onboarding-progress-value" style={{ width: `${progress}%` }} />
+        </div>
+        <p className="onboarding-step">
+          Step {currentStep + 1} of {questions.length}
+        </p>
+        <h2>{currentQuestion.label}</h2>
+        {currentQuestion.helperText && <p className="text-muted">{currentQuestion.helperText}</p>}
+        <input
+          type="text"
+          className="onboarding-input"
+          placeholder={currentQuestion.placeholder}
+          value={responses[currentQuestion.id] ?? ''}
+          onChange={(event) => onResponseChange(currentQuestion.id, event.target.value)}
+        />
+        <div className="onboarding-actions">
+          <button type="button" className="onboarding-btn secondary" onClick={onBack} disabled={currentStep === 0}>
+            Back
+          </button>
+          <button type="button" className="onboarding-btn primary" onClick={isLastStep ? onFinish : onNext}>
+            {isLastStep ? 'Finish' : 'Next'}
+          </button>
+        </div>
       </div>
     </div>
   );

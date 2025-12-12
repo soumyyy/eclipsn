@@ -12,6 +12,14 @@ import { embedEmailText } from '../services/embeddings';
 import { TEST_USER_ID } from '../constants';
 
 const router = Router();
+const DEFAULT_LOOKBACK_HOURS = 48;
+
+function formatDateForQuery(date: Date) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}/${month}/${day}`;
+}
 
 router.get('/connect', (req, res) => {
   const state = req.query.state?.toString() || 'pluto-dev';
@@ -45,8 +53,13 @@ router.get('/callback', async (req, res) => {
 router.get('/threads', async (req, res) => {
   const maxResults = parseInt(req.query.limit as string, 10) || 20;
   const importanceOnly = req.query.importance_only === 'true';
+  const lookbackHours = parseInt(req.query.hours as string, 10) || DEFAULT_LOOKBACK_HOURS;
+  const startDate = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
   try {
-    const { threads } = await fetchRecentThreads(TEST_USER_ID, maxResults, { importanceOnly });
+    const { threads } = await fetchRecentThreads(TEST_USER_ID, maxResults, {
+      importanceOnly,
+      startDate: formatDateForQuery(startDate)
+    });
     const importantCount = threads.filter((thread) => (thread.importanceScore ?? 0) >= 0).length;
     const promoCount = threads.length - importantCount;
     return res.json({
@@ -54,7 +67,8 @@ router.get('/threads', async (req, res) => {
       meta: {
         total: threads.length,
         important: importantCount,
-        promotions: promoCount
+        promotions: promoCount,
+        lookbackHours
       }
     });
   } catch (error) {

@@ -158,13 +158,10 @@ export default function LoginPage() {
         <div className="login-card">
           {stage === 'signin' && (
             <>
-              <p className="login-kicker">PLUTO · OPS CONSOLE</p>
-              <h1>Reconnect with your orbit.</h1>
-              <p className="text-muted">
-                Authorize Gmail once, and we&apos;ll keep your bespoke memory bank and inbox intelligence flowing.
-              </p>
+              <p className="login-kicker">ECLIPSN</p>
+              <h1>Connect with your orbit.</h1>
               <GoogleSignInButton onClick={handleGoogleSignIn} loading={authLoading} />
-              <p className="login-footnote">We never send without your direction. One-click disconnect anytime.</p>
+              <p className="login-footnote">Privacy-first</p>
             </>
           )}
           {stage === 'onboarding' && (
