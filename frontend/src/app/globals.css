@@ -437,6 +437,22 @@ body {
   padding-left: 8px;
 }
 
+.gmail-state {
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.gmail-state.connected {
+  color: rgba(57, 255, 20, 0.8);
+}
+
+.gmail-state.disconnected {
+  color: rgba(255, 100, 100, 0.85);
+}
+
 .profile-modal-body section {
   margin-bottom: 24px;
 }

@@ -1,15 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BespokeMemoryModal } from './BespokeMemoryModal';
 import { ProfileModal } from './ProfileModal';
 import { useSessionContext } from '@/components/SessionProvider';
-import type { GmailStatus, UserProfile } from '@/lib/session';
+import type { GmailStatus } from '@/lib/session';
+import type { UserProfile } from '@/lib/profile';
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
 export function Sidebar() {
-  const { session, loading: sessionLoading, refreshSession, updateProfile, updateGmailStatus } = useSessionContext();
+  const { session, refreshSession, updateGmailStatus } = useSessionContext();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [isBespokeMemoryModalOpen, setIsBespokeMemoryModalOpen] = useState(false);
@@ -30,14 +31,6 @@ export function Sidebar() {
 
   const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
   const profile: UserProfile | null = session?.profile ?? null;
-  const gmailLoading = sessionLoading || disconnecting;
-
-  const handleProfileUpdated = useCallback(
-    (nextProfile: UserProfile | null) => {
-      updateProfile(nextProfile);
-    },
-    [updateProfile]
-  );
 
   async function handleGmailAction() {
     if (gmailStatus.connected) {
@@ -113,14 +106,10 @@ export function Sidebar() {
       </div>
       {isProfileOpen && (
         <ProfileModal
-          profile={profile}
-          loading={sessionLoading}
-          gmailStatus={gmailStatus}
-          gmailLoading={gmailLoading}
           onGmailAction={handleGmailAction}
           onOpenBespoke={() => setIsBespokeMemoryModalOpen(true)}
           onClose={() => setIsProfileOpen(false)}
-          onProfileUpdated={handleProfileUpdated}
+          gmailActionPending={disconnecting}
         />
       )}
       {isBespokeMemoryModalOpen && (

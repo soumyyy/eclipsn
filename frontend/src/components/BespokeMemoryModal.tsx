@@ -10,6 +10,8 @@ import {
   useMemo,
   memo
 } from 'react';
+import { useSessionContext } from '@/components/SessionProvider';
+import type { GmailStatus } from '@/lib/session';
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 const FILE_GRAPH_LIMIT = 320;
 
@@ -73,6 +75,8 @@ export interface FileGraphResponse {
 type UploadStage = 'idle' | 'confirm' | 'uploading';
 
 export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
+  const { session } = useSessionContext();
+  const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
   const [fileQueue, setFileQueue] = useState<{ name: string; size: number }[]>([]);
   const [uploadStage, setUploadStage] = useState<UploadStage>('idle');
   const [isUploading, setIsUploading] = useState(false);
@@ -302,6 +306,13 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
         <div className="profile-modal-header">
           <div>
             <p className="profile-name">Bespoke Memory</p>
+            <p
+              className={`gmail-state ${gmailStatus.connected ? 'connected' : 'disconnected'}`}
+            >
+              {gmailStatus.connected
+                ? `Gmail connected as ${gmailStatus.name ?? gmailStatus.email ?? 'operator'}`
+                : 'Gmail disconnected — connect via profile panel'}
+            </p>
           </div>
         </div>
         <div className="profile-modal-body">

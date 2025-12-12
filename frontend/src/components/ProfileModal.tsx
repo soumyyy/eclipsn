@@ -1,24 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import type {
-  GmailStatus,
-  ProfileHistoryEntry,
-  ProfileNote,
-  UserProfile
-} from '@/lib/session';
+import { useSessionContext } from '@/components/SessionProvider';
+import {
+  normalizeProfileNotes,
+  type ProfileHistoryEntry,
+  type ProfileNote,
+  type UserProfile
+} from '@/lib/profile';
+import type { GmailStatus } from '@/lib/session';
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
 interface ProfileModalProps {
-  profile: UserProfile | null;
-  loading: boolean;
-  gmailStatus: GmailStatus | null;
-  gmailLoading: boolean;
   onGmailAction: () => void;
   onOpenBespoke: () => void;
   onClose: () => void;
-  onProfileUpdated: (profile: UserProfile | null) => void;
+  gmailActionPending: boolean;
 }
 
 const TABS: Array<{ id: 'profile' | 'connections' | 'history'; label: string }> = [
@@ -27,26 +25,19 @@ const TABS: Array<{ id: 'profile' | 'connections' | 'history'; label: string }> 
   { id: 'history', label: 'History' }
 ];
 
-export function ProfileModal({
-  profile,
-  loading,
-  gmailStatus,
-  gmailLoading,
-  onGmailAction,
-  onOpenBespoke,
-  onClose,
-  onProfileUpdated
-}: ProfileModalProps) {
+export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActionPending }: ProfileModalProps) {
   const [activeTab, setActiveTab] = useState<'profile' | 'connections' | 'history'>('profile');
   const [activeNoteIndex, setActiveNoteIndex] = useState<number | null>(null);
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [draftNoteText, setDraftNoteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { session, loading, updateProfile } = useSessionContext();
+  const profile: UserProfile | null = session?.profile ?? null;
+  const gmailStatus: GmailStatus | null = session?.gmail ?? null;
+  const gmailLoading = loading || gmailActionPending;
 
-  const normalizedNotes: ProfileNote[] = (profile?.customData?.notes ?? [])
-    .map((note) => (typeof note === 'string' ? { text: note, timestamp: null } : note ?? { text: '', timestamp: null }))
-    .filter((note) => Boolean(note.text));
+  const normalizedNotes: ProfileNote[] = normalizeProfileNotes(profile?.customData?.notes ?? []);
 
   const historyEntries = profile?.customData?.previousValues ?? {};
   const customExtras = Object.entries(profile?.customData ?? {}).filter(
@@ -140,10 +131,10 @@ export function ProfileModal({
         throw new Error('Failed to persist notes');
       }
       const data = await response.json();
-      onProfileUpdated(data.profile ?? null);
       setEditingNoteIndex(null);
       setDraftNoteText('');
       setActiveNoteIndex(null);
+      updateProfile(data.profile ?? null);
     } catch (err) {
       console.error('Failed to update note', err);
       setError('Could not update note. Try again.');

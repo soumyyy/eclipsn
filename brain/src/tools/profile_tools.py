@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
 from copy import deepcopy
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 from ..config import get_settings
+from ..utils.profile import now_iso, normalize_notes, normalize_prev_entries
 
 KNOWN_FIELDS = {
     "full_name": "fullName",
@@ -16,50 +16,6 @@ KNOWN_FIELDS = {
     "preferences": "preferences",
     "biography": "biography",
 }
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _normalize_notes(raw_notes: Any) -> List[Dict[str, Any]]:
-    notes: List[Dict[str, Any]] = []
-    if isinstance(raw_notes, list):
-        for entry in raw_notes:
-            if isinstance(entry, dict) and entry.get("text"):
-                notes.append({
-                    "text": entry.get("text"),
-                    "timestamp": entry.get("timestamp")
-                })
-            elif isinstance(entry, str) and entry.strip():
-                notes.append({
-                    "text": entry.strip(),
-                    "timestamp": None
-                })
-    return notes
-
-
-def _normalize_prev_entries(raw_entries: Any) -> List[Dict[str, Any]]:
-    normalized: List[Dict[str, Any]] = []
-    if isinstance(raw_entries, list):
-        entries = raw_entries
-    elif raw_entries is None:
-        entries = []
-    else:
-        entries = [raw_entries]
-
-    for entry in entries:
-        if isinstance(entry, dict) and "value" in entry:
-            normalized.append({
-                "value": entry.get("value"),
-                "timestamp": entry.get("timestamp")
-            })
-        elif entry is not None:
-            normalized.append({
-                "value": entry,
-                "timestamp": None
-            })
-    return normalized
 
 
 async def _fetch_existing_profile(client: httpx.AsyncClient, base_url: str) -> Optional[Dict[str, Any]]:
@@ -104,10 +60,10 @@ async def profile_update_tool(field: str | None = None, value: str | None = None
             prev_values = custom_data.get("previousValues")
             if not isinstance(prev_values, dict):
                 prev_values = {}
-            entries = _normalize_prev_entries(prev_values.get(field_key))
+            entries = normalize_prev_entries(prev_values.get(field_key))
             entries.append({
                 "value": previous_value,
-                "timestamp": _now_iso()
+                "timestamp": now_iso()
             })
             prev_values[field_key] = entries
             custom_data["previousValues"] = prev_values
@@ -133,10 +89,10 @@ async def profile_update_tool(field: str | None = None, value: str | None = None
                     record_previous_value(field, existing_value)
 
         if note:
-            normalized_notes = _normalize_notes(custom_data.get("notes"))
+            normalized_notes = normalize_notes(custom_data.get("notes"))
             normalized_notes.append({
                 "text": note,
-                "timestamp": _now_iso()
+                "timestamp": now_iso()
             })
             custom_data["notes"] = normalized_notes
             mark_custom_modified()

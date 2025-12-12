@@ -1,5 +1,11 @@
 'use client';
 
+import {
+  firstProfileNoteText,
+  normalizeProfileNotes,
+  type UserProfile
+} from '@/lib/profile';
+
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
 
 export type GmailStatus = {
@@ -7,37 +13,6 @@ export type GmailStatus = {
   email?: string;
   avatarUrl?: string;
   name?: string;
-};
-
-export type ProfileNote = {
-  text?: string;
-  timestamp?: string | null;
-};
-
-export type ProfileHistoryEntry = {
-  value?: string | null;
-  timestamp?: string | null;
-};
-
-export type ProfileCustomData = {
-  notes?: (string | ProfileNote)[];
-  previousValues?: Record<string, ProfileHistoryEntry[]>;
-  personalNote?: string;
-  [key: string]: unknown;
-};
-
-export type UserProfile = {
-  fullName?: string;
-  preferredName?: string;
-  timezone?: string;
-  contactEmail?: string;
-  phone?: string;
-  company?: string;
-  role?: string;
-  biography?: string;
-  preferences?: Record<string, unknown> | string | null;
-  updatedAt?: string | null;
-  customData?: ProfileCustomData;
 };
 
 export type SessionSnapshot = {
@@ -105,24 +80,11 @@ export function cacheProfileLocally(profile: UserProfile | null) {
   if (preferred) {
     localStorage.setItem('plutoProfileName', preferred);
   }
-  const notes = profile.customData?.notes;
-  const noteFromList =
-    Array.isArray(notes) && notes.length > 0
-      ? notes.find((entry) => {
-          if (!entry) return false;
-          if (typeof entry === 'string') return entry.trim().length > 0;
-          if (typeof entry.text !== 'string') return false;
-          return entry.text.trim().length > 0;
-        })
-      : undefined;
+  const notes = normalizeProfileNotes(profile.customData?.notes ?? []);
   const memo =
     typeof profile.customData?.personalNote === 'string' && profile.customData.personalNote.trim().length > 0
       ? profile.customData.personalNote
-      : typeof noteFromList === 'string'
-        ? noteFromList
-        : noteFromList && typeof noteFromList === 'object'
-          ? noteFromList.text
-          : undefined;
+      : firstProfileNoteText(notes) ?? undefined;
   if (memo) {
     localStorage.setItem('plutoProfileNote', memo);
   }

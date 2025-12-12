@@ -13,9 +13,9 @@ import {
   cacheProfileLocally,
   fetchSessionSnapshot,
   type GmailStatus,
-  type SessionSnapshot,
-  type UserProfile
+  type SessionSnapshot
 } from '@/lib/session';
+import { type UserProfile } from '@/lib/profile';
 
 type RefreshOptions = {
   showSpinner?: boolean;
