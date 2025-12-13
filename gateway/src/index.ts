@@ -5,7 +5,6 @@ import { config } from './config';
 import chatRouter from './routes/chat';
 import gmailRouter from './routes/gmail';
 import profileRouter from './routes/profile';
-import outlookRouter from './routes/outlook';
 import { scheduleGmailJobs } from './jobs/gmailJobs';
 import memoryRouter from './routes/memory';
 import graphRouter from './routes/graph';
@@ -25,7 +24,6 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/chat', chatRouter);
 app.use('/api/gmail', gmailRouter);
-app.use('/api/outlook', outlookRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/memory', memoryRouter);
 app.use('/api/graph', graphRouter);

@@ -12,7 +12,7 @@ Eclipsn is a personal agent inspired by Bind.ai and Poke that focuses on a singl
 1. **Frontend (Next.js App Router)** – chat UI, sidebar, and simple stateful experience. Talks to the gateway only.
 2. **Gateway (Node.js + Express)** – REST endpoints, Gmail OAuth handler, proxy to the Python brain, and optional GraphQL facade.
 3. **Brain (FastAPI + LangChain)** – orchestrates LLM calls, tools, and memory search. Stubs included for LangChain tools and pg-backed memory store.
-4. **Database (Postgres + pgvector)** – stores users, conversations, messages, memories, Gmail tokens, threads, and tasks. Schema lives in `db/schema.sql`.
+4. **Database (Postgres + pgvector)** – stores users, conversations, messages, bespoke memory ingestions/chunks, Gmail tokens, threads, and tasks. Schema lives in `db/schema.sql`.
 
 ### Request Flow
 Browser → Gateway (`/api/chat`) → Brain (`/chat`) → tools (memory + Gmail stubs) → Brain response → Gateway → Browser UI.

@@ -42,24 +42,6 @@ create table if not exists messages (
 );
 create index if not exists idx_messages_conversation_id on messages(conversation_id);
 
-create table if not exists memories (
-    id uuid primary key default gen_random_uuid(),
-    user_id uuid not null references users(id),
-    source text not null,
-    content text not null,
-    importance_score numeric,
-    created_at timestamptz not null default now()
-);
-create index if not exists idx_memories_user_id on memories(user_id);
-
-create table if not exists memory_embeddings (
-    id uuid primary key default gen_random_uuid(),
-    memory_id uuid not null references memories(id) on delete cascade,
-    embedding vector(1536),
-    index_type text not null default 'semantic'
-);
-create index if not exists idx_memory_embeddings_memory_id on memory_embeddings(memory_id);
-
 create table if not exists gmail_tokens (
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null unique references users(id),
@@ -95,6 +77,15 @@ create table if not exists gmail_thread_embeddings (
 );
 create index if not exists idx_gmail_thread_embeddings_user on gmail_thread_embeddings(user_id);
 
+create table if not exists gmail_thread_bodies (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references users(id),
+    thread_id uuid not null references gmail_threads(id) on delete cascade,
+    body text not null,
+    created_at timestamptz not null default now()
+);
+create unique index if not exists idx_gmail_thread_bodies_thread on gmail_thread_bodies(thread_id);
+
 create table if not exists tasks (
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null references users(id),
@@ -107,3 +98,41 @@ create table if not exists tasks (
 );
 create index if not exists idx_tasks_user_id on tasks(user_id);
 create index if not exists idx_tasks_thread_id on tasks(thread_id);
+
+create table if not exists memory_ingestions (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references users(id),
+    source text not null,
+    total_files int default 0,
+    processed_files int default 0,
+    chunked_files int default 0,
+    indexed_chunks int default 0,
+    status text not null default 'pending',
+    error text,
+    created_at timestamptz not null default now(),
+    completed_at timestamptz,
+    last_indexed_at timestamptz,
+    batch_name text,
+    graph_metrics jsonb,
+    graph_synced_at timestamptz
+);
+create index if not exists idx_memory_ingestions_user on memory_ingestions(user_id);
+
+create table if not exists memory_chunks (
+    id uuid primary key default gen_random_uuid(),
+    ingestion_id uuid not null references memory_ingestions(id) on delete cascade,
+    user_id uuid not null references users(id),
+    source text not null,
+    file_path text not null,
+    chunk_index int not null,
+    content text not null,
+    metadata jsonb default '{}'::jsonb,
+    display_name text,
+    summary text,
+    embedding vector(1536),
+    graph_metadata jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now()
+);
+create index if not exists idx_memory_chunks_ingestion on memory_chunks(ingestion_id);
+create index if not exists idx_memory_chunks_user on memory_chunks(user_id);
+create index if not exists idx_memory_chunks_ingestion_user on memory_chunks(ingestion_id, user_id);

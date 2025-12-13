@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-import re
+import base64
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Iterable, Tuple
@@ -157,28 +156,27 @@ def ensure_edge_type(edge_type: GraphEdgeType) -> EdgeSchema:
         raise ValueError(f"Unsupported edge type: {edge_type}") from exc
 
 
-def normalize_key(value: str) -> str:
-    compact = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().upper())
-    compact = compact.strip("-")
-    return compact or "UNK"
-
-
-def stable_hash(parts: Iterable[str], length: int = 10) -> str:
-    joined = "::".join(parts)
-    digest = hashlib.sha1(joined.encode("utf-8")).hexdigest().upper()
-    return digest[:length]
-
-
 def make_node_id(node_type: GraphNodeType, *parts: str) -> str:
-    schema = ensure_node_type(node_type)
-    normalized = [normalize_key(part) for part in parts if part]
-    digest = stable_hash([schema.prefix, *normalized])
-    stem = normalized[0] if normalized else node_type.value
-    return f"{schema.prefix}_{stem}_{digest}"
+    if node_type == GraphNodeType.DOCUMENT:
+        return f"{node_type.value}::{parts[0] if parts else ''}"
+    if node_type == GraphNodeType.SECTION:
+        ingestion_id = parts[0] if parts else ""
+        section_path = parts[1] if len(parts) > 1 else ""
+        encoded_path = _encode_graph_part(section_path)
+        return f"{node_type.value}::{ingestion_id}::{encoded_path}"
+    if node_type == GraphNodeType.CHUNK:
+        return f"{node_type.value}::{parts[0] if parts else ''}"
+    extra = [_encode_graph_part(part) for part in parts if part]
+    return "::".join([node_type.value, *extra])
 
 
 def make_edge_id(edge_type: GraphEdgeType, from_id: str, to_id: str) -> str:
-    schema = ensure_edge_type(edge_type)
-    digest = stable_hash([schema.type.value, from_id, to_id])
-    return f"{schema.type.value}_{digest}"
+    ensure_edge_type(edge_type)
+    encoded_from = _encode_graph_part(from_id)
+    encoded_to = _encode_graph_part(to_id)
+    return f"{edge_type.value}::{encoded_from}::{encoded_to}"
 
+
+def _encode_graph_part(value: str) -> str:
+    encoded = base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii")
+    return encoded.rstrip("=")

@@ -179,7 +179,7 @@ export default function LoginPage() {
             <div className="onboarding-card success">
               <h2>Launch window secured.</h2>
               <p className="text-muted">
-                Eclipsn synced your profile. You&apos;re ready to ingest bespoke memories, Gmail threads, and Outlook signals.
+                Eclipsn synced your profile. You&apos;re ready to ingest bespoke memories and Gmail threads.
               </p>
               <button type="button" className="onboarding-btn primary" onClick={handleEnterApp} disabled={completing}>
                 Enter Operator Console

@@ -12,6 +12,10 @@ from .database import get_pool
 from .faiss_store import EmbeddingRecord, write_faiss_index
 from .graph_sync import sync_ingestions_to_graph
 
+
+def _to_pgvector(values: Sequence[float]) -> str:
+    return "[" + ",".join(str(float(value)) for value in values) + "]"
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,8 +34,7 @@ async def fetch_pending_chunks(limit: int = 50) -> List[MemoryChunkRow]:
     query = """
         SELECT mc.id, mc.user_id, mc.source, mc.file_path, mc.content, mc.ingestion_id
         FROM memory_chunks mc
-        LEFT JOIN memory_chunk_embeddings me ON me.chunk_id = mc.id
-        WHERE me.chunk_id IS NULL
+        WHERE mc.embedding IS NULL
         ORDER BY mc.created_at
         LIMIT $1
     """
@@ -55,14 +58,15 @@ async def store_embeddings(rows: Sequence[MemoryChunkRow], vectors: Sequence[Lis
         raise ValueError("Rows and vectors length mismatch")
     pool = await get_pool()
     query = """
-        INSERT INTO memory_chunk_embeddings (chunk_id, user_id, source, embedding)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (chunk_id) DO NOTHING
+        UPDATE memory_chunks
+        SET embedding = $2
+        WHERE id = $1
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
             for row, vector in zip(rows, vectors):
-                await conn.execute(query, row.id, row.user_id, row.source, vector)
+                vector_literal = _to_pgvector(vector)
+                await conn.execute(query, row.id, vector_literal)
 
 
 async def fetch_all_embeddings_for_user(user_id: str) -> List[EmbeddingRecord]:
@@ -73,10 +77,10 @@ async def fetch_all_embeddings_for_user(user_id: str) -> List[EmbeddingRecord]:
                mc.source,
                mc.file_path,
                mc.content,
-               mce.embedding
-        FROM memory_chunk_embeddings mce
-        JOIN memory_chunks mc ON mc.id = mce.chunk_id
+               mc.embedding
+        FROM memory_chunks mc
         WHERE mc.user_id = $1
+          AND mc.embedding IS NOT NULL
         ORDER BY mc.created_at
         """
     async with pool.acquire() as conn:
@@ -85,7 +89,13 @@ async def fetch_all_embeddings_for_user(user_id: str) -> List[EmbeddingRecord]:
     for row in rows:
         chunk_id = row["chunk_id"]
         user_id = row["user_id"]
-        vector = row["embedding"]
+        raw_vector = row["embedding"]
+        if raw_vector is None:
+            continue
+        if isinstance(raw_vector, str):
+            vector_values = [float(val) for val in raw_vector.strip("[]").split(",") if val]
+        else:
+            vector_values = [float(val) for val in raw_vector]
         records.append(
             EmbeddingRecord(
                 chunk_id=str(chunk_id),
@@ -93,7 +103,7 @@ async def fetch_all_embeddings_for_user(user_id: str) -> List[EmbeddingRecord]:
                 source=row["source"],
                 file_path=row["file_path"],
                 content=row["content"],
-                vector=[float(x) for x in vector],
+                vector=vector_values,
             )
         )
     return records
@@ -199,24 +209,23 @@ async def update_index_counts(counts: dict[str, int]) -> list[str]:
                     ingestion_id,
                     increment
                 )
-            remaining = await conn.fetchval(
-                """
-                SELECT COUNT(*)
-                FROM memory_chunks mc
-                LEFT JOIN memory_chunk_embeddings me ON me.chunk_id = mc.id
-                WHERE mc.ingestion_id = $1 AND me.chunk_id IS NULL
-                """,
-                ingestion_id
-            )
-            if remaining == 0:
-                await conn.execute(
+                remaining = await conn.fetchval(
                     """
-                    UPDATE memory_ingestions
-                    SET status = 'uploaded',
-                        completed_at = NOW()
-                    WHERE id = $1
+                    SELECT COUNT(*)
+                    FROM memory_chunks
+                    WHERE ingestion_id = $1 AND embedding IS NULL
                     """,
                     ingestion_id
                 )
-                completed.append(ingestion_id)
+                if remaining == 0:
+                    await conn.execute(
+                        """
+                        UPDATE memory_ingestions
+                        SET status = 'uploaded',
+                            completed_at = NOW()
+                        WHERE id = $1
+                        """,
+                        ingestion_id
+                    )
+                    completed.append(ingestion_id)
     return completed

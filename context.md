@@ -3,7 +3,7 @@
 This document captures the current state of the project, major features implemented so far, and the key architectural decisions. It serves as a quick reference when planning new work (e.g., the graph-based RAG visualization).
 
 ## 1. High-Level Architecture
-- **Gateway (Node/Express + PostgreSQL):** handles OAuth flows, Gmail/Outlook proxies, bespoke memory uploads, and coordination with the brain service.
+- **Gateway (Node/Express + PostgreSQL):** handles OAuth flows, Gmail proxies, bespoke memory uploads, and coordination with the brain service.
 - **Brain (FastAPI/LangChain):** orchestrates the chat agent, retrieval (bespoke FAISS, Gmail semantic search, Tavily URL context), and tool calls (Gmail detail, profile_update, etc.).
 - **Frontend (Next.js/React):** hosts the chat UI, bespoke memory modal, and sidebar connections.
 
@@ -12,7 +12,7 @@ This document captures the current state of the project, major features implemen
 ### Bespoke Memory
 - Upload `.md` files/folders via the modal (drag/drop + inline confirmation).
 - Chunking/embedding pipeline in gateway & brain:
-  - `memory_chunks` table records each chunk, `memory_chunk_embeddings` stores vectors.
+  - `memory_chunks` now stores both chunk metadata and pgvector embeddings.
   - Brain indexer embeds pending chunks and maintains per-user FAISS indexes.
 - Auto-triggered indexing: gateway calls `/memory/index` so uploads become searchable immediately.
 - Clear/delete flows:
@@ -37,7 +37,7 @@ This document captures the current state of the project, major features implemen
 
 ## 3. Key Tables / Endpoints (Gateway)
 - `memory_ingestions`: tracks uploads (`chunked_files`, `indexed_chunks`, `batch_name`, progress statuses).
-- `memory_chunks`, `memory_chunk_embeddings`: chunk storage + vectors.
+- `memory_chunks`: chunk storage, embeddings, and graph metadata.
 - `gmail_threads`, `gmail_thread_embeddings`, `gmail_thread_bodies`: Gmail metadata, vectors, and cached bodies.
 - Endpoints:
   - `/api/memory/upload`, `/api/memory/status`, `/api/memory/history`, `/api/memory/:id`, `DELETE /api/memory` (clear all).
@@ -61,8 +61,7 @@ This document captures the current state of the project, major features implemen
 - Supabase/Postgres schema changes tracked via `db/schema.sql` and individual migrations in `db/migrations/`.
 
 ## 6. Next Steps Candidates
-- Outlook ingestion parity (Graph fetcher, embeddings, full-body cache).
-- Graph visualization plan (documented in `outlook-plan.md` but pending implementation).
+- Graph visualization refinements (dashboards + controls once backend slice APIs stabilize).
 - Tagging/filtering for bespoke uploads and RRF citations.
 - Sidebar status indicators for memory upload/index progress.
 - Graph-based UI (per new spec) once data infra is ready.

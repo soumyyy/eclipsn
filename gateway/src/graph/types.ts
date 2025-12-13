@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import { Buffer } from 'node:buffer';
 
 export enum GraphNodeType {
   DOCUMENT = 'DOCUMENT',
@@ -132,26 +132,68 @@ export const EDGE_SCHEMAS: Record<GraphEdgeType, EdgeSchema> = {
   }
 };
 
-function normalizeKey(value: string): string {
-  const compact = value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-');
-  const trimmed = compact.replace(/^-+|-+$/g, '');
-  return trimmed || 'UNK';
+function encodeGraphPart(value: string): string {
+  const encoded = Buffer.from(value, 'utf-8').toString('base64url');
+  return encoded.replace(/=+$/u, '');
 }
 
-function stableHash(parts: string[], length = 10): string {
-  const joined = parts.join('::');
-  return crypto.createHash('sha1').update(joined).digest('hex').toUpperCase().slice(0, length);
+function decodeGraphPart(value: string): string {
+  if (!value) return '';
+  const pad = value.length % 4;
+  const normalized = pad === 0 ? value : `${value}${'='.repeat(4 - pad)}`;
+  return Buffer.from(normalized, 'base64url').toString('utf-8');
 }
 
 export function makeNodeId(nodeType: GraphNodeType, ...parts: string[]): string {
-  const schema = NODE_SCHEMAS[nodeType];
-  const normalized = parts.filter(Boolean).map(part => normalizeKey(part));
-  const digest = stableHash([schema.prefix, ...normalized]);
-  const stem = normalized[0] ?? nodeType;
-  return `${schema.prefix}_${stem}_${digest}`;
+  switch (nodeType) {
+    case GraphNodeType.DOCUMENT:
+      return `${nodeType}::${parts[0] ?? ''}`;
+    case GraphNodeType.SECTION: {
+      const ingestionId = parts[0] ?? '';
+      const sectionKey = encodeGraphPart(parts[1] ?? '');
+      return `${nodeType}::${ingestionId}::${sectionKey}`;
+    }
+    case GraphNodeType.CHUNK:
+      return `${nodeType}::${parts[0] ?? ''}`;
+    default: {
+      const extra = parts.filter(Boolean).map(part => encodeGraphPart(part));
+      return [nodeType, ...extra].join('::');
+    }
+  }
 }
 
 export function makeEdgeId(edgeType: GraphEdgeType, fromId: string, toId: string): string {
-  const digest = stableHash([edgeType, fromId, toId]);
-  return `${edgeType}_${digest}`;
+  const encodedFrom = encodeGraphPart(fromId);
+  const encodedTo = encodeGraphPart(toId);
+  return `${edgeType}::${encodedFrom}::${encodedTo}`;
+}
+
+export function parseNodeId(nodeId: string): {
+  type: GraphNodeType | null;
+  ingestionId?: string | null;
+  filePath?: string | null;
+  chunkId?: string | null;
+} {
+  if (!nodeId) {
+    return { type: null };
+  }
+  const segments = nodeId.split('::');
+  const rawType = segments[0] as GraphNodeType | undefined;
+  if (!rawType || !(rawType in GraphNodeType)) {
+    return { type: null };
+  }
+  switch (rawType) {
+    case GraphNodeType.DOCUMENT:
+      return { type: rawType, ingestionId: segments[1] ?? null };
+    case GraphNodeType.SECTION: {
+      const ingestionId = segments[1] ?? null;
+      const encodedPath = segments[2] ?? '';
+      const filePath = encodedPath ? decodeGraphPart(encodedPath) : null;
+      return { type: rawType, ingestionId, filePath };
+    }
+    case GraphNodeType.CHUNK:
+      return { type: rawType, chunkId: segments[1] ?? null };
+    default:
+      return { type: rawType };
+  }
 }
