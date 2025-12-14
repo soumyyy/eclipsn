@@ -30,6 +30,7 @@ export async function saveGmailTokens(params: {
   expiry: Date;
 }) {
   // TODO: encrypt tokens at rest.
+  await ensureUserRecord(params.userId);
   const client = await pool.connect();
   try {
     await client.query(
@@ -417,6 +418,26 @@ export async function insertMessage(params: {
 
 export function getPool() {
   return pool;
+}
+
+export async function attachGmailIdentity(userId: string, gmailEmail: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    const customDataPatch = {
+      gmail_email: gmailEmail
+    };
+    await client.query(
+      `INSERT INTO user_profiles (user_id, contact_email, custom_data, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (user_id) DO UPDATE
+       SET contact_email = COALESCE($2, user_profiles.contact_email),
+           custom_data = jsonb_strip_nulls(user_profiles.custom_data || $3::jsonb),
+           updated_at = NOW()`,
+      [userId, gmailEmail, JSON.stringify(customDataPatch)]
+    );
+  } finally {
+    client.release();
+  }
 }
 
 export async function findOrCreateUserByGmailEmail(

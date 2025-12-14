@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GoogleSignInButton } from '@/components/login/GoogleSignInButton';
 import { OnboardingPrompt, type OnboardingQuestion } from '@/components/login/OnboardingPrompt';
@@ -28,8 +28,12 @@ type Stage = 'signin' | 'onboarding' | 'success';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { session, loading: sessionLoading, refreshSession } = useSessionContext();
-  const [stage, setStage] = useState<Stage>('signin');
+  const [stage, setStage] = useState<Stage>(() => {
+    const stageParam = searchParams.get('stage');
+    return stageParam === 'onboarding' ? 'onboarding' : 'signin';
+  });
   const [authLoading, setAuthLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
@@ -81,7 +85,8 @@ export default function LoginPage() {
             popupRef.current.close();
           }
           if (snapshot.profile) {
-            router.replace('/');
+            // Force a page refresh to ensure cookies are loaded
+            window.location.href = '/';
           } else {
             setStage('onboarding');
           }

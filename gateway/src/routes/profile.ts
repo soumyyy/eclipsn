@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { getUserProfile, upsertUserProfile, deleteUserAccount } from '../services/db';
+import { getUserProfile, upsertUserProfile } from '../services/db';
 import { requireUserId } from '../utils/request';
-import { config } from '../config';
+import { deleteAccount } from '../services/userService';
 
 const router = Router();
 
@@ -32,14 +32,7 @@ router.post('/', async (req, res) => {
 router.delete('/account', async (req, res) => {
   const userId = requireUserId(req);
   try {
-    await deleteUserAccount(userId);
-    res.clearCookie(config.sessionCookieName, {
-      httpOnly: true,
-      sameSite: config.sessionCookieSameSite,
-      secure: config.sessionCookieSecure,
-      domain: config.sessionCookieDomain,
-      path: '/'
-    });
+    await deleteAccount(userId, res);
     return res.json({ status: 'deleted' });
   } catch (error) {
     console.error('Failed to delete account', error);

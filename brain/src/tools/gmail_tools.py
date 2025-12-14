@@ -4,8 +4,8 @@ from ..services.gateway_client import fetch_gmail_threads, semantic_gmail_search
 
 
 async def gmail_search_tool(user_id: str, query: str, limit: int = 20) -> List[GmailThread]:
-    _ = (user_id, query)
-    payload = await fetch_gmail_threads(limit=limit, importance_only=True)
+    _ = query
+    payload = await fetch_gmail_threads(user_id=user_id, limit=limit, importance_only=True)
     raw_threads = payload.get("threads", [])
     threads: List[GmailThread] = []
     for entry in raw_threads:
@@ -24,7 +24,7 @@ async def gmail_search_tool(user_id: str, query: str, limit: int = 20) -> List[G
 
 
 async def gmail_get_thread_tool(user_id: str, thread_id: str) -> GmailThread:
-    detail = await fetch_gmail_thread_detail(thread_id)
+    detail = await fetch_gmail_thread_detail(user_id, thread_id)
     if not detail:
         return GmailThread(id=thread_id, subject="Thread", summary="Thread not found")
     return GmailThread(
@@ -48,8 +48,7 @@ async def gmail_extract_tasks_tool(user_id: str, thread_id: str) -> List[Task]:
 
 
 async def gmail_semantic_search_tool(user_id: str, query: str, limit: int = 5) -> str:
-    _ = user_id
-    matches = await semantic_gmail_search(query, limit)
+    matches = await semantic_gmail_search(user_id, query, limit)
     if not matches:
         return "No relevant Gmail threads found."
 

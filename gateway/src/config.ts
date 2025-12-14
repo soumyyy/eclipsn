@@ -31,5 +31,6 @@ export const config = {
   sessionCookieSecure:
     process.env.USER_COOKIE_SECURE !== undefined
       ? process.env.USER_COOKIE_SECURE === 'true'
-      : isProduction
+      : isProduction,
+  internalApiKey: process.env.INTERNAL_API_KEY || ''
 };

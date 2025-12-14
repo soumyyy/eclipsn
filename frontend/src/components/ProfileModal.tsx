@@ -43,7 +43,10 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const { session, loading, updateProfile } = useSessionContext();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deletePhrase = 'delete account';
+  const deleteInputMatches = deleteConfirmationText.trim().toLowerCase() === deletePhrase;
+  const { session, loading, updateProfile, updateGmailStatus } = useSessionContext();
   const profile: UserProfile | null = session?.profile ?? null;
   const gmailStatus: GmailStatus | null = session?.gmail ?? null;
   const gmailLoading = loading || gmailActionPending;
@@ -235,26 +238,33 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirmationText !== 'delete account') return;
-
+    if (!deleteInputMatches) {
+      setDeleteError('Type "delete account" to confirm.');
+      return;
+    }
     setIsDeletingAccount(true);
+    setDeleteError(null);
     try {
       const response = await gatewayFetch('/api/profile/account', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
+        method: 'DELETE'
       });
-
       if (!response.ok) {
         throw new Error('Failed to delete account');
       }
-
-      // Account deleted successfully, redirect to login
-      router.push('/login');
-    } catch (err) {
-      console.error('Failed to delete account', err);
-      setError('Failed to delete account. Please try again.');
+      updateProfile(null);
+      updateGmailStatus({ connected: false });
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('EclipsnOnboarded');
+        localStorage.removeItem('EclipsnProfileName');
+        localStorage.removeItem('EclipsnProfileNote');
+      }
+      onClose();
+      router.replace('/login');
       setShowDeleteConfirmation(false);
       setDeleteConfirmationText('');
+    } catch (err) {
+      console.error('Failed to delete account', err);
+      setDeleteError('Failed to delete account. Please try again.');
     } finally {
       setIsDeletingAccount(false);
     }
@@ -473,15 +483,57 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
         <div className="profile-settings-danger-zone">
           <h4>Danger Zone</h4>
           <p className="text-muted">
-            Once you delete your account, there is no going back. Please be certain.
+            Once you delete your account, there is no going back. All emails, bespoke memories, and chat
+            history will be removed permanently.
           </p>
-          <button
-            type="button"
-            className="profile-delete-account-btn"
-            onClick={() => setShowDeleteConfirmation(true)}
-          >
-            Delete Account
-          </button>
+          {!showDeleteConfirmation ? (
+            <button
+              type="button"
+              className="profile-delete-account-btn"
+              onClick={() => {
+                setShowDeleteConfirmation(true);
+                setDeleteConfirmationText('');
+                setDeleteError(null);
+              }}
+            >
+              Delete Account
+            </button>
+          ) : (
+            <div className="profile-delete-confirm">
+              <label htmlFor="delete-confirmation">Type &quot;delete account&quot; to confirm</label>
+              <input
+                id="delete-confirmation"
+                type="text"
+                value={deleteConfirmationText}
+                placeholder="delete account"
+                onChange={(event) => setDeleteConfirmationText(event.target.value)}
+                disabled={isDeletingAccount}
+              />
+              {deleteError && <p className="profile-error">{deleteError}</p>}
+              <div className="profile-delete-actions">
+                <button
+                  type="button"
+                  className="profile-cancel-delete"
+                  onClick={() => {
+                    setShowDeleteConfirmation(false);
+                    setDeleteConfirmationText('');
+                    setDeleteError(null);
+                  }}
+                  disabled={isDeletingAccount}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="profile-delete-account-btn"
+                  onClick={handleDeleteAccount}
+                  disabled={isDeletingAccount || !deleteInputMatches}
+                >
+                  {isDeletingAccount ? 'Deleting…' : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
     );

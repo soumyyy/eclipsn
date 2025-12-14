@@ -15,13 +15,13 @@ import { requireUserId } from '../utils/request';
 import { ensureInitialGmailSync, formatGmailDate } from '../jobs/gmailInitialSync';
 import { getGmailSyncMetadata } from '../services/db';
 import { config } from '../config';
+import { attachGmailIdentity, establishSession } from '../services/userService';
 
 const router = Router();
 const DEFAULT_LOOKBACK_HOURS = 48;
 
-router.get('/connect', (req, res) => {
-  requireUserId(req);
-  const state = req.query.state?.toString() || 'Eclipsn-dev';
+router.get('/connect', (_req, res) => {
+  const state = _req.query.state?.toString() || 'Eclipsn-dev';
   const authUrl = getAuthUrl(state);
   return res.redirect(authUrl);
 });
@@ -56,8 +56,18 @@ router.get('/callback', async (req, res) => {
       return res.status(400).send('Failed to get Gmail email from OAuth response.');
     }
 
-    // Find or create user based on Gmail email
-    const { userId, created: isNewUser } = await findOrCreateUserByGmailEmail(gmailEmail);
+    let userId: string | null = null;
+    const cookieUserId =
+      typeof req.cookies?.[config.sessionCookieName] === 'string'
+        ? (req.cookies[config.sessionCookieName] as string)
+        : undefined;
+    if (cookieUserId) {
+      userId = cookieUserId;
+      await attachGmailIdentity(userId, gmailEmail);
+    } else {
+      const result = await findOrCreateUserByGmailEmail(gmailEmail);
+      userId = result.userId;
+    }
 
     // Save Gmail tokens for this user
     const expiry = new Date(Date.now() + tokens.expires_in * 1000);
@@ -69,25 +79,16 @@ router.get('/callback', async (req, res) => {
     });
 
     // Set session cookie for the user
-    res.cookie(config.sessionCookieName, userId, {
-      httpOnly: true,
-      sameSite: config.sessionCookieSameSite,
-      secure: config.sessionCookieSecure,
-      domain: config.sessionCookieDomain,
-      maxAge: 365 * 24 * 60 * 60 * 1000 // 1 year
+    await establishSession(res, userId);
+
+    ensureInitialGmailSync(userId).catch((err) => {
+      console.error('Failed to run initial Gmail sync', err);
     });
 
-    // Start initial sync for new users
-    if (isNewUser) {
-      ensureInitialGmailSync(userId).catch((err) => {
-        console.error('Failed to run initial Gmail sync', err);
-      });
-    }
-
-    return res.send('Gmail connected successfully. You can close this window.');
+    return res.redirect(`${config.frontendOrigin}/auth/callback?success=true`);
   } catch (error) {
     console.error('Failed to exchange Gmail code', error);
-    return res.status(500).send('Failed to connect Gmail.');
+    return res.redirect(`${config.frontendOrigin}/auth/callback?success=false`);
   }
 });
 

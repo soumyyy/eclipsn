@@ -25,7 +25,7 @@ def _rrf_merge(groups: List[List[schemas.Memory]], k: int = 5, constant: int = 6
 
 
 async def _gmail_semantic_results(user_id: str, query: str, limit: int = 5) -> List[schemas.Memory]:
-    threads = await semantic_gmail_search(query, limit)
+    threads = await semantic_gmail_search(user_id, query, limit)
     memories: List[schemas.Memory] = []
     for idx, entry in enumerate(threads):
         subject = entry.get("subject") or "(no subject)"

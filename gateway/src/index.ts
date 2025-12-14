@@ -30,6 +30,17 @@ app.use('/api/profile', profileRouter);
 app.use('/api/memory', memoryRouter);
 app.use('/api/graph', graphRouter);
 
+// Error handler
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = typeof err?.status === 'number' ? err.status : 500;
+  const message = err?.message || 'Internal server error';
+  if (status >= 500) {
+    console.error(err);
+  }
+  res.status(status).json({ error: message });
+});
+
 // GraphQL stub for future dashboards
 // app.use('/graphql', graphqlHTTP({
 //   schema,
