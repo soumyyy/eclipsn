@@ -9,7 +9,12 @@ export class UnauthorizedError extends Error {
 
 export function requireUserId(req: Request): string {
   if (!req.userId) {
+    console.warn('[auth] requireUserId called without session');
     throw new UnauthorizedError();
   }
+  return req.userId;
+}
+
+export function getUserId(req: Request): string | undefined {
   return req.userId;
 }

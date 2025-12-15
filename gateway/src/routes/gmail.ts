@@ -11,7 +11,7 @@ import {
 } from '../services/db';
 import { fetchRecentThreads, getGmailProfile, NO_GMAIL_TOKENS, fetchThreadBody } from '../services/gmailClient';
 import { embedEmailText } from '../services/embeddings';
-import { requireUserId } from '../utils/request';
+import { getUserId, requireUserId } from '../utils/request';
 import { ensureInitialGmailSync, formatGmailDate } from '../jobs/gmailInitialSync';
 import { getGmailSyncMetadata } from '../services/db';
 import { config } from '../config';
@@ -125,7 +125,10 @@ router.get('/threads', async (req, res) => {
 });
 
 router.get('/status', async (req, res) => {
-  const userId = requireUserId(req);
+  const userId = getUserId(req);
+  if (!userId) {
+    return res.json({ connected: false });
+  }
   try {
     const profile = await getGmailProfile(userId);
     const syncMeta = await getGmailSyncMetadata(userId);

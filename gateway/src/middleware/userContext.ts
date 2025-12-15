@@ -33,6 +33,9 @@ export async function attachUserContext(req: Request, res: Response, next: NextF
     const userId = await ensureSessionUser(req, res, {
       explicitUserId: explicitAllowed ? explicitId : undefined
     });
+    if (!userId && !explicitAllowed) {
+      console.warn(`[auth] No session for ${req.method} ${req.path}`, { cookies: req.headers.cookie });
+    }
     if (userId) {
       req.userId = userId;
     }

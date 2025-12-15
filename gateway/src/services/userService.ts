@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { randomUUID } from 'node:crypto';
 import { config } from '../config';
 import {
   ensureUserRecord,
@@ -8,9 +9,24 @@ import {
 } from './db';
 
 const COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+const USER_COOKIE_SOURCE = 'oauth';
 
-function establishSessionCookie(res: Response, userId: string) {
-  res.cookie(config.sessionCookieName, userId, {
+interface SessionTicket {
+  userId: string;
+}
+
+function parseSessionTicket(raw: string | undefined): SessionTicket | null {
+  if (!raw) return null;
+  if (!isValidUUID(raw)) return null;
+  return { userId: raw };
+}
+
+function createSessionTicket(userId: string): string {
+  return userId;
+}
+
+function setSessionCookie(res: Response, userId: string) {
+  res.cookie(config.sessionCookieName, createSessionTicket(userId), {
     httpOnly: true,
     sameSite: config.sessionCookieSameSite,
     secure: config.sessionCookieSecure,
@@ -29,11 +45,14 @@ export async function ensureSessionUser(
     return options.explicitUserId;
   }
 
-  const cookieId = typeof req.cookies?.[config.sessionCookieName] === 'string'
-    ? (req.cookies[config.sessionCookieName] as string)
-    : undefined;
-  if (isValidUUID(cookieId)) {
-    return cookieId;
+  const ticket = parseSessionTicket(
+    typeof req.cookies?.[config.sessionCookieName] === 'string'
+      ? (req.cookies[config.sessionCookieName] as string)
+      : undefined
+  );
+  if (ticket) {
+    await ensureUserRecord(ticket.userId);
+    return ticket.userId;
   }
 
   return undefined;
@@ -41,7 +60,7 @@ export async function ensureSessionUser(
 
 export async function establishSession(res: Response, userId: string) {
   await ensureUserRecord(userId);
-  establishSessionCookie(res, userId);
+  setSessionCookie(res, userId);
 }
 
 export async function attachGmailIdentity(userId: string, gmailEmail: string) {

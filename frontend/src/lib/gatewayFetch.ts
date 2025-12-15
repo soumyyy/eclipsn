@@ -1,14 +1,7 @@
-const BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:4000';
-
-function resolveUrl(path: string): string {
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  return `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
-}
+const BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || '';
 
 export function gatewayFetch(path: string, init: RequestInit = {}) {
-  const url = resolveUrl(path);
+  const url = BASE_URL ? `${BASE_URL}${path}` : path;
   const headers =
     init.headers instanceof Headers
       ? init.headers

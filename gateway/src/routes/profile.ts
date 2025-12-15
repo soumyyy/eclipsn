@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { getUserProfile, upsertUserProfile } from '../services/db';
-import { requireUserId } from '../utils/request';
+import { getUserId, requireUserId } from '../utils/request';
 import { deleteAccount } from '../services/userService';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
-  const userId = requireUserId(req);
+  const userId = getUserId(req);
+  if (!userId) {
+    return res.json({ profile: null });
+  }
   try {
     const profile = await getUserProfile(userId);
     return res.json({ profile });
@@ -19,6 +22,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const update = req.body ?? {};
   const userId = requireUserId(req);
+  console.info('[profile] update request', { userId, hasUpdateKeys: Object.keys(update).length > 0 });
   try {
     await upsertUserProfile(userId, update);
     const profile = await getUserProfile(userId);
