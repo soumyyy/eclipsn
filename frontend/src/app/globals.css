@@ -492,18 +492,19 @@ body {
   border: 1px solid rgba(215, 206, 185, 0.4);
   border-radius: 12px;
   padding: 5px;
-  padding-top: 5px;
-  padding-bottom: 5px;
+  padding-top: 15px;
+  padding-bottom: 15px;
   box-shadow: 0 0 30px rgba(215, 206, 185, 0.2);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: flex-start;
   position: relative;
 }
 
 .profile-modal.memory-modal {
   align-items: center;
+  justify-content: flex-start;
 }
 
 .memory-modal {
@@ -1767,11 +1768,15 @@ body {
   padding: 12px;
   background: #17181c;
   box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.45), 0 10px 30px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .graph-canvas .graph-svg {
   width: 100%;
-  height: 420px;
+  flex: 1;
+  height: 100%;
   display: block;
 }
 
@@ -1779,6 +1784,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  height: 100%;
 }
 
 .graph-metrics-grid {
@@ -2151,16 +2157,44 @@ body {
   margin-bottom: 0px;
 }
 
+.memory-graph-shell {
+  min-height: 420px;
+  height: 420px;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.memory-graph-shell > * {
+  flex: 1;
+  height: 100%;
+}
+
 .memory-graph-placeholder {
   border: 1px dashed rgba(215, 206, 185, 0.4);
   border-radius: 10px;
   padding: 18px;
   text-align: center;
   color: rgba(215, 206, 185, 0.75);
-  min-height: 220px;
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 100%;
+}
+
+.memory-empty-copy {
+  text-align: left;
+}
+
+.memory-empty-copy p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(215, 206, 185, 0.85);
+}
+
+.memory-empty-copy p:last-child {
+  margin-bottom: 0;
 }
 
 .memory-graph-section.hidden {
@@ -2308,4 +2342,3 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
-

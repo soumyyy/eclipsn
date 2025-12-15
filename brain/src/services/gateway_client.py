@@ -1,15 +1,25 @@
 import logging
+import time
+import uuid
+
 import httpx
+
 from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 
 
-def _internal_headers():
+def _internal_headers(user_id: str | None = None):
     settings = get_settings()
-    headers: dict[str, str] = {}
+    headers: dict[str, str] = {
+        "x-internal-service": "brain",
+        "x-request-id": str(uuid.uuid4()),
+        "x-timestamp": str(int(time.time() * 1000)),
+    }
     if settings.gateway_internal_secret:
         headers["x-internal-secret"] = settings.gateway_internal_secret
+    if user_id:
+        headers["x-user-id"] = user_id
     return headers
 
 
@@ -23,7 +33,7 @@ async def fetch_gmail_threads(user_id: str, limit: int = 5, importance_only: boo
     url = f"{settings.gateway_url}/api/gmail/threads"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params, headers=_internal_headers())
+            response = await client.get(url, params=params, headers=_internal_headers(user_id))
         response.raise_for_status()
         return response.json()
     except httpx.HTTPError as exc:
@@ -40,7 +50,7 @@ async def semantic_gmail_search(user_id: str, query: str, limit: int = 5) -> lis
                 url,
                 params={"user_id": user_id},
                 json={"query": query, "limit": limit},
-                headers=_internal_headers()
+                headers=_internal_headers(user_id)
             )
         response.raise_for_status()
         data = response.json()
@@ -58,7 +68,7 @@ async def fetch_gmail_thread_detail(user_id: str, thread_id: str) -> dict | None
             response = await client.get(
                 url,
                 params={"user_id": user_id},
-                headers=_internal_headers()
+                headers=_internal_headers(user_id)
             )
         if response.status_code == 404:
             return None

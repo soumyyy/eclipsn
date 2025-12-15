@@ -72,12 +72,19 @@ export interface FileGraphResponse {
   };
 }
 
-type UploadStage = 'idle' | 'confirm' | 'uploading';
+type UploadStage = 'idle' | 'uploading';
+
+interface QueuedFile {
+  file: File;
+  name: string;
+  size: number;
+  relativePath: string;
+}
 
 export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
   const { session } = useSessionContext();
   const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
-  const [fileQueue, setFileQueue] = useState<{ name: string; size: number }[]>([]);
+  const [fileQueue, setFileQueue] = useState<QueuedFile[]>([]);
   const [uploadStage, setUploadStage] = useState<UploadStage>('idle');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -97,7 +104,7 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
   const [dragActive, setDragActive] = useState(false);
   const allowedExtensions = useMemo(() => ['.md'], []);
 
-  async function loadStatus() {
+  const loadStatus = useCallback(async () => {
     try {
       const response = await gatewayFetch('memory/status');
       if (!response.ok) throw new Error('Failed to load status');
@@ -108,9 +115,9 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
     } finally {
       setStatusLoading(false);
     }
-  }
+  }, []);
 
-  async function loadHistory(limit = 6) {
+  const loadHistory = useCallback(async (limit = 6) => {
     try {
       const response = await gatewayFetch(`memory/history?limit=${limit}`);
       if (!response.ok) throw new Error('Failed to load history');
@@ -121,59 +128,73 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
     } finally {
       setHistoryLoading(false);
     }
-  }
+  }, []);
 
-  const loadFileGraph = useCallback(async () => {
-    setGraphLoading(true);
-    setGraphError(null);
+  const loadFileGraph = useCallback(
+    async (options?: { withLoader?: boolean }) => {
+      const withLoader = options?.withLoader ?? false;
+      if (withLoader) {
+        setGraphLoading(true);
+      }
+      setGraphError(null);
       try {
         const params = new URLSearchParams({
           limit: String(FILE_GRAPH_LIMIT)
         });
         const response = await gatewayFetch(`memory/graph?${params.toString()}`);
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || 'Failed to load file graph');
-      }
-      const data = await response.json();
-      setGraphData((prev) => {
-        if (prev && shallowGraphEqual(prev, data.graph ?? null)) {
-          return prev;
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || 'Failed to load file graph');
         }
-        return data.graph ?? null;
-      });
-    } catch (error) {
-      console.error('Failed to load file graph', error);
-      setGraphError((error as Error).message || 'Failed to load graph');
-      setGraphData(null);
-    } finally {
-      setGraphLoading(false);
-    }
-  }, []);
+        const data = await response.json();
+        setGraphData((prev) => {
+          if (prev && shallowGraphEqual(prev, data.graph ?? null)) {
+            return prev;
+          }
+          return data.graph ?? null;
+        });
+      } catch (error) {
+        console.error('Failed to load file graph', error);
+        setGraphError((error as Error).message || 'Failed to load graph');
+        setGraphData(null);
+      } finally {
+        setGraphLoading(false);
+      }
+    },
+    []
+  );
+
+  const refreshAll = useCallback(() => {
+    loadStatus();
+    loadHistory();
+    loadFileGraph();
+  }, [loadStatus, loadHistory, loadFileGraph]);
 
   useEffect(() => {
-    const refresh = () => {
-      loadStatus();
-      loadHistory();
-      loadFileGraph();
-    };
-    refresh();
-    const interval = setInterval(refresh, 300000);
+    loadStatus();
+    loadHistory();
+    loadFileGraph({ withLoader: true });
+    const interval = setInterval(refreshAll, 300000);
     return () => clearInterval(interval);
-  }, [loadFileGraph]);
+  }, [loadStatus, loadHistory, loadFileGraph, refreshAll]);
+
+  useEffect(() => {
+    if (!statusData) {
+      return;
+    }
+    const inProgressStatuses: BespokeIngestionStatus[] = ['chunking', 'chunked', 'indexing'];
+    if (!inProgressStatuses.includes(statusData.status)) {
+      return;
+    }
+    const interval = setInterval(() => {
+      refreshAll();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [statusData, refreshAll]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || []);
-    const validFiles = files.filter((file) =>
-      allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
-    );
-    const queue = validFiles.map((file) => ({
-      name: file.webkitRelativePath || file.name,
-      size: file.size
-    }));
-    setFileQueue(queue);
-    setUploadError(null);
-    setUploadStage(queue.length ? 'confirm' : 'idle');
+    handleSelectedFiles(files);
   }
 
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
@@ -190,29 +211,43 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
     event.preventDefault();
     setDragActive(false);
     const files = Array.from(event.dataTransfer.files || []);
-    const filtered = files.filter((file) =>
-      allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
-    );
-    const queue = filtered.map((file) => ({
-      name: file.webkitRelativePath || file.name,
-      size: file.size
-    }));
-    setFileQueue(queue);
-    setUploadError(null);
-    setUploadStage(queue.length ? 'confirm' : 'idle');
+    handleSelectedFiles(files);
   }
 
-  async function handleUpload() {
-    if (!fileQueue.length || isUploading || !fileInputRef.current?.files) return;
+  function handleSelectedFiles(files: File[]) {
+    const validFiles = files.filter((file) =>
+      allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
+    );
+    const queue: QueuedFile[] = validFiles.map((file) => {
+      const fileWithPath = file as File & { webkitRelativePath?: string };
+      const relativePath = fileWithPath.webkitRelativePath || file.name;
+      return {
+        file,
+        name: relativePath,
+        size: file.size,
+        relativePath
+      };
+    });
+    setFileQueue(queue);
+    setUploadError(null);
+    if (queue.length) {
+      void handleUpload(queue);
+    } else {
+      setUploadStage('idle');
+    }
+  }
+
+  async function handleUpload(queueOverride?: QueuedFile[]) {
+    const activeQueue = queueOverride ?? fileQueue;
+    if (!activeQueue.length || isUploading) return;
     setUploadStage('uploading');
     setIsUploading(true);
     setUploadError(null);
     try {
       const formData = new FormData();
-      Array.from(fileInputRef.current.files).forEach((file) => {
+      activeQueue.forEach(({ file, relativePath }) => {
         formData.append('files', file, file.name);
-        const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
-        formData.append('paths', relativePath || file.name);
+        formData.append('paths', relativePath);
       });
       const response = await gatewayFetch('memory/upload', {
         method: 'POST',
@@ -221,11 +256,9 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
       if (!response.ok) {
         let errorMessage = 'Upload failed';
         try {
-          // Try to parse as JSON first
           const data = await response.json();
           errorMessage = data.error || `Upload failed (${response.status})`;
         } catch {
-          // If not JSON, get text response
           try {
             const text = await response.text();
             errorMessage = text || `Upload failed (${response.status})`;
@@ -238,26 +271,18 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
       await loadStatus();
       await loadHistory();
       await loadFileGraph();
-      setFileQueue([]);
-      setUploadStage('idle');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     } catch (error) {
       console.error('Failed to upload bespoke memory', error);
       setUploadError((error as Error).message || 'Upload failed');
     } finally {
       setIsUploading(false);
+      setUploadStage('idle');
+      setFileQueue([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   }
-
-  const handleResetSelection = useCallback(() => {
-    setFileQueue([]);
-    setUploadStage('idle');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }, []);
 
   async function handleReindex(ingestionId: string) {
     setActionLoading(ingestionId);
@@ -313,36 +338,17 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
     }
   }
 
-  const hasUploads =
-    history.length > 0 ||
-    Boolean(statusData && (statusData.totalFiles > 0 || statusData.chunkedFiles > 0 || statusData.indexedChunks > 0));
-  const showEmptyState = !hasUploads && uploadStage === 'idle' && fileQueue.length === 0;
-
   return (
     <div className="profile-modal-overlay" onClick={onClose}>
       <div className="profile-modal memory-modal" onClick={(evt) => evt.stopPropagation()}>
         <div className="profile-modal-header">
           <div>
             <p className="profile-name">Index</p>
-            {/* <p
-              className={`gmail-state ${gmailStatus.connected ? 'connected' : 'disconnected'}`}
-            >
-              {gmailStatus.connected
-                ? `Gmail connected as ${gmailStatus.name ?? gmailStatus.email ?? 'operator'}`
-                : 'Gmail disconnected — connect via profile panel'}
-            </p> */}
           </div>
         </div>
-        <div className={`profile-modal-body ${showEmptyState ? 'memory-empty-layout' : ''}`}>
-          <div className={`memory-columns ${showEmptyState ? 'empty-grid' : ''}`}>
-            <div className={`memory-left-column ${showEmptyState ? 'empty' : ''}`}>
-              {showEmptyState && (
-                <div className="memory-empty-state">
-                  <p>This is your personal knowledge space.</p>
-                  <p>Upload journals, notes, or writing so the system understands how you think.</p>
-                  <p>Everything stays private and grounds responses in your reality.</p>
-                </div>
-              )}
+        <div className="profile-modal-body">
+          <div className="memory-columns">
+            <div className="memory-left-column">
               <UploadSection
                 dragActive={dragActive}
                 onDragOver={handleDragOver}
@@ -354,40 +360,46 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
                 uploadStage={uploadStage}
                 fileQueue={fileQueue}
                 isUploading={isUploading}
-                onUpload={handleUpload}
                 onOpenPicker={handleOpenFilePicker}
-                onCancelSelection={handleResetSelection}
                 uploadError={uploadError}
                 statusData={statusData}
                 statusLoading={statusLoading}
               />
-              {(hasUploads || historyLoading) && (
-                <HistorySection
-                  history={history}
-                  historyLoading={historyLoading}
-                  clearingAll={clearingAll}
-                  onClearAll={handleClearAll}
-                  onDelete={handleDelete}
-                  actionLoadingId={actionLoading}
-                />
-              )}
+              <HistorySection
+                history={history}
+                historyLoading={historyLoading}
+                clearingAll={clearingAll}
+                onClearAll={handleClearAll}
+                onDelete={handleDelete}
+                actionLoadingId={actionLoading}
+              />
             </div>
             <div className="memory-right-column">
-              <section className={`memory-graph-section ${showEmptyState ? 'hidden' : ''}`}>
+              <section className="memory-graph-section">
                 <div className="memory-history-header">
                   <h3>Graph View</h3>
                 </div>
-                {graphLoading ? (
-                  <div className="memory-graph-placeholder">
-                    <p>Building your knowledge map…</p>
-                  </div>
-                ) : graphData && graphData.nodes.length > 0 ? (
-                  <MemoryGraphPanel graph={graphData} loading={graphLoading} error={graphError} />
-                ) : (
-                  <div className="memory-graph-placeholder">
-                    <p>Your knowledge map appears after your first upload.</p>
-                  </div>
-                )}
+                <div className="memory-graph-shell">
+                  {graphLoading ? (
+                    <div className="memory-graph-panel">
+                      <div className="memory-graph-placeholder">
+                        <p>Building your knowledge map…</p>
+                      </div>
+                    </div>
+                  ) : graphData && graphData.nodes.length > 0 ? (
+                    <MemoryGraphPanel graph={graphData} loading={graphLoading} error={graphError} />
+                  ) : (
+                    <div className="memory-graph-panel">
+                      <div className="memory-graph-placeholder">
+                        <div className="memory-empty-copy">
+                          <p>This is your personal knowledge space.</p>
+                          <p>Upload journals, notes, or writing so the system understands how you think.</p>
+                          <p>Everything stays private and grounds responses in your reality.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </section>
             </div>
           </div>
@@ -429,11 +441,9 @@ interface UploadSectionProps {
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   allowedExtensions: string[];
   uploadStage: UploadStage;
-  fileQueue: { name: string; size: number }[];
+  fileQueue: QueuedFile[];
   isUploading: boolean;
-  onUpload: () => void;
   onOpenPicker: () => void;
-  onCancelSelection: () => void;
   uploadError: string | null;
   statusData: BespokeStatus | null;
   statusLoading: boolean;
@@ -450,9 +460,7 @@ const UploadSection = memo(function UploadSection({
   uploadStage,
   fileQueue,
   isUploading,
-  onUpload,
   onOpenPicker,
-  onCancelSelection,
   uploadError,
   statusData,
   statusLoading
@@ -480,42 +488,25 @@ const UploadSection = memo(function UploadSection({
           onChange={onFileChange}
           accept={allowedExtensions.join(',')}
         />
-        {uploadStage === 'confirm' && fileQueue.length > 0 && (
-          <div className="memory-confirmation">
-            <p>
-              Upload {fileQueue.length} Markdown file{fileQueue.length === 1 ? '' : 's'}?
-            </p>
-            <ul className="memory-file-queue">
-              {fileQueue.slice(0, 6).map((file) => (
-                <li key={file.name}>{file.name}</li>
-              ))}
-              {fileQueue.length > 6 && <li>+ {fileQueue.length - 6} more</li>}
-            </ul>
-            <div className="memory-actions">
-              <button type="button" className="memory-upload-btn primary" onClick={onUpload} disabled={isUploading}>
-                {isUploading ? 'Uploading…' : 'Confirm'}
-              </button>
-              <button
-                type="button"
-                className="memory-upload-btn secondary"
-                onClick={onCancelSelection}
-                disabled={isUploading}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
         {uploadStage === 'uploading' && (
           <div className="memory-upload-progress">
             <div className="progress-track">
               <div className="progress-value active" style={{ width: '60%' }} />
             </div>
-            <p>Uploading…</p>
+            <p>
+              Uploading {fileQueue.length} Markdown file{fileQueue.length === 1 ? '' : 's'}…
+            </p>
+            {fileQueue.length > 0 && (
+              <ul className="memory-file-queue">
+                {fileQueue.slice(0, 6).map((file) => (
+                  <li key={file.name}>{file.name}</li>
+                ))}
+                {fileQueue.length > 6 && <li>+ {fileQueue.length - 6} more</li>}
+              </ul>
+            )}
           </div>
         )}
-        {uploadStage !== 'confirm' &&
-          uploadStage !== 'uploading' &&
+        {uploadStage !== 'uploading' &&
           statusData &&
           statusData.status !== 'uploaded' &&
           statusData.status !== 'failed' && <MemoryProgress status={statusData} />}

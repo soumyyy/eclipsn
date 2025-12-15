@@ -631,7 +631,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       )}
       <div className="profile-modal-overlay" onClick={onClose}>
         <div className="profile-modal" onClick={(evt) => evt.stopPropagation()}>
-        <div className="profile-modal-header">
+        {/* <div className="profile-modal-header">
           <div>
             {profile && (profile.role || profile.company) && (
               <p className="text-muted">
@@ -639,7 +639,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
               </p>
             )}
           </div>
-        </div>
+        </div> */}
         <div className="profile-modal-body-grid">
           <aside className="profile-tabs">
             {TABS.map((tab) => (

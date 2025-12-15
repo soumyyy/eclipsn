@@ -1,6 +1,7 @@
-import type { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Response } from 'express';
 import { ensureSessionUser } from '../services/userService';
-import { sessionHelpers } from './session';
+import type { AuthenticatedRequest } from './internalAuth';
+import { InternalAuthService } from './internalAuth';
 
 /**
  * Simplified user context middleware using express-session
@@ -33,33 +34,40 @@ function requiresAuthentication(path: string): boolean {
   return PROTECTED_PATHS.some(protectedPath => path.startsWith(protectedPath));
 }
 
-function hasInternalAccess(req: Request): boolean {
-  const token = req.header('x-internal-secret');
-  return token === process.env.INTERNAL_API_KEY;
+function hasInternalHeaders(req: AuthenticatedRequest): boolean {
+  return Boolean(req.header('x-internal-secret') || req.header('x-internal-service'));
 }
 
-export async function attachUserContext(req: Request, res: Response, next: NextFunction) {
+export async function attachUserContext(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     // Skip user context for certain paths
     if (shouldSkipUserContext(req.path)) {
       return next();
     }
     
-    // Handle internal API calls
-    if (hasInternalAccess(req)) {
-      const headerUserId = req.header('x-user-id');
-      const queryUserId = typeof req.query.user_id === 'string' ? req.query.user_id : undefined;
-      const bodyUserId =
-        req.body && typeof req.body === 'object' && typeof (req.body as any).user_id === 'string'
-          ? (req.body as any).user_id
-          : undefined;
-      const internalUserId = headerUserId || queryUserId || bodyUserId;
+    // Handle internal API calls with strict validation
+    if (hasInternalHeaders(req)) {
+      const context = InternalAuthService.validateRequest(req);
+      if (!context) {
+        console.warn(`[Auth] Internal authentication failed for ${req.method} ${req.path}`);
+        return res.status(401).json({
+          error: 'Internal authentication required',
+          code: 'INTERNAL_AUTH_FAILED',
+          timestamp: new Date().toISOString()
+        });
+      }
 
-      if (internalUserId) {
-        req.userId = internalUserId;
-        console.log(`[Auth] Internal API call to ${req.path} (user: ${internalUserId})`);
+      req.internal = context;
+
+      if (context.userId) {
+        req.userId = context.userId;
+        console.log(
+          `[Auth] Internal API call to ${req.path} (service: ${context.serviceId}, user: ${context.userId})`
+        );
       } else {
-        console.warn(`[Auth] Internal API call to ${req.path} without user context`);
+        console.warn(
+          `[Auth] Internal API call to ${req.path} (service: ${context.serviceId}) without user context`
+        );
       }
       return next();
     }
