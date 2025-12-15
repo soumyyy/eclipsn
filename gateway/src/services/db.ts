@@ -79,6 +79,8 @@ export async function getGmailTokens(userId: string) {
 export interface GmailSyncMetadata {
   initialSyncStartedAt: Date | null;
   initialSyncCompletedAt: Date | null;
+  initialSyncTotalThreads: number | null;
+  initialSyncSyncedThreads: number | null;
 }
 
 export async function getGmailSyncMetadata(userId: string): Promise<GmailSyncMetadata | null> {
@@ -86,7 +88,9 @@ export async function getGmailSyncMetadata(userId: string): Promise<GmailSyncMet
   try {
     const result = await client.query(
       `SELECT initial_sync_started_at as "initialSyncStartedAt",
-              initial_sync_completed_at as "initialSyncCompletedAt"
+              initial_sync_completed_at as "initialSyncCompletedAt",
+              initial_sync_total_threads as "initialSyncTotalThreads",
+              initial_sync_synced_threads as "initialSyncSyncedThreads"
          FROM gmail_tokens
         WHERE user_id = $1`,
       [userId]
@@ -95,7 +99,9 @@ export async function getGmailSyncMetadata(userId: string): Promise<GmailSyncMet
     const row = result.rows[0];
     return {
       initialSyncStartedAt: row.initialSyncStartedAt as Date | null,
-      initialSyncCompletedAt: row.initialSyncCompletedAt as Date | null
+      initialSyncCompletedAt: row.initialSyncCompletedAt as Date | null,
+      initialSyncTotalThreads: row.initialSyncTotalThreads as number | null,
+      initialSyncSyncedThreads: row.initialSyncSyncedThreads as number | null
     };
   } finally {
     client.release();
@@ -104,9 +110,8 @@ export async function getGmailSyncMetadata(userId: string): Promise<GmailSyncMet
 
 export async function markInitialGmailSync(
   userId: string,
-  options: { started?: boolean; completed?: boolean }
+  options: { started?: boolean; completed?: boolean; totalThreads?: number | null; syncedThreads?: number | null }
 ): Promise<void> {
-  if (!options.started && !options.completed) return;
   const client = await pool.connect();
   try {
     await client.query(
@@ -116,9 +121,17 @@ export async function markInitialGmailSync(
                   WHEN $3 THEN NOW()
                   WHEN $2 THEN NULL
                   ELSE initial_sync_completed_at
-              END
+              END,
+              initial_sync_total_threads = COALESCE($4, initial_sync_total_threads),
+              initial_sync_synced_threads = COALESCE($5, initial_sync_synced_threads)
         WHERE user_id = $1`,
-      [userId, options.started ? true : false, options.completed ? true : false]
+      [
+        userId,
+        options.started ? true : false,
+        options.completed ? true : false,
+        options.totalThreads ?? null,
+        options.syncedThreads ?? null
+      ]
     );
   } finally {
     client.release();

@@ -14,6 +14,8 @@ export type GmailStatus = {
   name?: string;
   initialSyncStartedAt?: string | null;
   initialSyncCompletedAt?: string | null;
+  initialSyncTotalThreads?: number | null;
+  initialSyncSyncedThreads?: number | null;
 };
 
 export type SessionSnapshot = {
@@ -34,7 +36,19 @@ function normalizeGmailStatus(payload: unknown): GmailStatus {
     initialSyncStartedAt:
       typeof record.initialSyncStartedAt === 'string' ? (record.initialSyncStartedAt as string) : null,
     initialSyncCompletedAt:
-      typeof record.initialSyncCompletedAt === 'string' ? (record.initialSyncCompletedAt as string) : null
+      typeof record.initialSyncCompletedAt === 'string' ? (record.initialSyncCompletedAt as string) : null,
+    initialSyncTotalThreads:
+      typeof record.initialSyncTotalThreads === 'number'
+        ? (record.initialSyncTotalThreads as number)
+        : record.initialSyncTotalThreads === null
+          ? null
+          : undefined,
+    initialSyncSyncedThreads:
+      typeof record.initialSyncSyncedThreads === 'number'
+        ? (record.initialSyncSyncedThreads as number)
+        : record.initialSyncSyncedThreads === null
+          ? null
+          : undefined
   };
 }
 

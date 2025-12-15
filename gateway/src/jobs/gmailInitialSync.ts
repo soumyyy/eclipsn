@@ -1,4 +1,4 @@
-import { fetchRecentThreads } from '../services/gmailClient';
+import { fetchRecentThreads, NO_GMAIL_TOKENS } from '../services/gmailClient';
 import { getGmailSyncMetadata, markInitialGmailSync } from '../services/db';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -22,11 +22,12 @@ export async function ensureInitialGmailSync(userId: string): Promise<void> {
 export async function runInitialGmailSync(userId: string): Promise<void> {
   try {
     console.log(`[Gmail Sync] Initial sync started for user ${userId}`);
-    await markInitialGmailSync(userId, { started: true });
+    await markInitialGmailSync(userId, { started: true, completed: false, totalThreads: 0, syncedThreads: 0 });
     const now = new Date();
     const start = new Date(now.getTime() - INITIAL_SYNC_LOOKBACK_DAYS * DAY_MS);
     let pageToken: string | undefined;
-    let total = 0;
+    let totalSynced = 0;
+    let totalEstimate: number | null = null;
     do {
       const result = await fetchRecentThreads(userId, 1000, {
         maxResults: 1000,
@@ -35,12 +36,25 @@ export async function runInitialGmailSync(userId: string): Promise<void> {
         pageToken,
         importanceOnly: false
       });
-      total += result.threads.length;
+      if (totalEstimate === null && typeof result.resultSizeEstimate === 'number') {
+        totalEstimate = result.resultSizeEstimate;
+        await markInitialGmailSync(userId, { totalThreads: totalEstimate });
+      }
+      totalSynced += result.threads.length;
+      await markInitialGmailSync(userId, { syncedThreads: totalSynced });
       pageToken = result.nextPageToken;
     } while (pageToken);
-    await markInitialGmailSync(userId, { completed: true });
-    console.log(`[Gmail Sync] Initial sync completed for user ${userId} (threads=${total})`);
+    await markInitialGmailSync(userId, {
+      completed: true,
+      totalThreads: totalEstimate ?? totalSynced,
+      syncedThreads: totalSynced
+    });
+    console.log(`[Gmail Sync] Initial sync completed for user ${userId} (threads=${totalSynced})`);
   } catch (error) {
+    if (error instanceof Error && error.message === NO_GMAIL_TOKENS) {
+      console.info(`[Gmail Sync] Initial sync skipped for user ${userId} (no Gmail tokens)`);
+      return;
+    }
     console.error(`[Gmail Sync] Initial sync failed for user ${userId}`, error);
   }
 }

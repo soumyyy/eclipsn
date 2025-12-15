@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS gmail_tokens (
     expiry TIMESTAMPTZ NOT NULL,
     initial_sync_started_at TIMESTAMPTZ,
     initial_sync_completed_at TIMESTAMPTZ,
+    initial_sync_total_threads INTEGER,
+    initial_sync_synced_threads INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_gmail_tokens_user_id ON gmail_tokens(user_id);

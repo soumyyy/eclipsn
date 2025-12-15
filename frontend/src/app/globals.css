@@ -413,6 +413,66 @@ body {
   margin-top: 0;
 }
 
+.gmail-sync-card {
+  margin-top: 12px;
+  border: 1px solid rgba(215, 206, 185, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(23, 24, 28, 0.65);
+}
+
+.gmail-sync-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.gmail-sync-title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(215, 206, 185, 0.8);
+}
+
+.gmail-sync-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(215, 206, 185, 0.9);
+}
+
+.gmail-sync-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(215, 206, 185, 0.15);
+  overflow: hidden;
+}
+
+.gmail-sync-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #f7b733, #fc4a1a);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.gmail-sync-progress.indeterminate .gmail-sync-progress-bar {
+  width: 35%;
+  animation: gmailProgressIndeterminate 1.4s infinite ease-in-out;
+}
+
+@keyframes gmailProgressIndeterminate {
+  0% {
+    margin-left: -35%;
+  }
+  50% {
+    margin-left: 50%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+
 .profile-identity-button {
   width: 100%;
   display: flex;

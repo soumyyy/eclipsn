@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getUserProfile, upsertUserProfile } from '../services/db';
 import { getUserId, requireUserId } from '../utils/request';
-import { deleteAccount } from '../services/userService';
+import { deleteAccount, logoutUser } from '../services/userService';
 
 const router = Router();
 
@@ -42,6 +42,11 @@ router.delete('/account', async (req, res) => {
     console.error('Failed to delete account', error);
     return res.status(500).json({ error: 'Failed to delete account' });
   }
+});
+
+router.post('/logout', (req, res) => {
+  logoutUser(req, res);
+  return res.json({ status: 'signed_out' });
 });
 
 export default router;

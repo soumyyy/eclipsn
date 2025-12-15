@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BespokeMemoryModal } from './BespokeMemoryModal';
 import { ProfileModal } from './ProfileModal';
 import { ModalPortal } from './ModalPortal';
@@ -29,13 +29,37 @@ export function Sidebar() {
       refreshSession();
     }
   }, [isProfileOpen, refreshSession]);
-
   const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
   const profile: UserProfile | null = session?.profile ?? null;
   const initialSyncPending =
     gmailStatus.connected &&
     !!gmailStatus.initialSyncStartedAt &&
     !gmailStatus.initialSyncCompletedAt;
+  const totalThreads =
+    typeof gmailStatus.initialSyncTotalThreads === 'number' ? gmailStatus.initialSyncTotalThreads : null;
+  const syncedThreads =
+    typeof gmailStatus.initialSyncSyncedThreads === 'number' ? gmailStatus.initialSyncSyncedThreads : null;
+  const syncPercent =
+    totalThreads && totalThreads > 0 && typeof syncedThreads === 'number'
+      ? Math.min(100, Math.round((Math.min(syncedThreads, totalThreads) / totalThreads) * 100))
+      : null;
+  const syncLabel = useMemo(() => {
+    if (typeof syncedThreads === 'number' && typeof totalThreads === 'number' && totalThreads > 0) {
+      return `${Math.min(syncedThreads, totalThreads).toLocaleString()} / ${totalThreads.toLocaleString()} threads`;
+    }
+    if (typeof syncedThreads === 'number') {
+      return `${syncedThreads.toLocaleString()} threads synced`;
+    }
+    return 'Syncing Gmail…';
+  }, [syncedThreads, totalThreads]);
+
+  useEffect(() => {
+    if (!initialSyncPending || disconnecting) return;
+    const interval = setInterval(() => {
+      refreshSession();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [initialSyncPending, disconnecting, refreshSession]);
 
   async function handleGmailAction() {
     if (gmailStatus.connected) {
@@ -46,9 +70,12 @@ export function Sidebar() {
           method: 'POST'
         });
         if (!response.ok) throw new Error('Failed to disconnect Gmail');
+        await gatewayFetch('profile/logout', { method: 'POST' }).catch(() => undefined);
         updateGmailStatus({ connected: false });
         if (typeof window !== 'undefined') {
           localStorage.removeItem('EclipsnOnboarded');
+          localStorage.removeItem('EclipsnProfileName');
+          localStorage.removeItem('EclipsnProfileNote');
           window.location.href = '/login';
         }
       } catch (error) {
@@ -97,7 +124,18 @@ export function Sidebar() {
             </button>
           </div>
           {initialSyncPending && (
-            <p className="text-muted connection-footnote">Setting up your eclipsn</p>
+            <div className="gmail-sync-card">
+              <div className="gmail-sync-header">
+                <p className="gmail-sync-title">Setting up your Eclipsn</p>
+                <p className="gmail-sync-subtitle">{disconnecting ? 'Disconnecting Gmail…' : syncLabel}</p>
+              </div>
+              <div className={`gmail-sync-progress ${syncPercent === null ? 'indeterminate' : ''}`}>
+                <div
+                  className="gmail-sync-progress-bar"
+                  style={syncPercent !== null ? { width: `${syncPercent}%` } : undefined}
+                />
+              </div>
+            </div>
           )}
         </section>
         <section className="profile-identity-card">

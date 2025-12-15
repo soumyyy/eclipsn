@@ -197,7 +197,9 @@ router.get('/status', async (req, res) => {
       avatarUrl: profile.avatarUrl,
       name: profile.name,
       initialSyncStartedAt: syncMeta?.initialSyncStartedAt ?? null,
-      initialSyncCompletedAt: syncMeta?.initialSyncCompletedAt ?? null
+      initialSyncCompletedAt: syncMeta?.initialSyncCompletedAt ?? null,
+      initialSyncTotalThreads: syncMeta?.initialSyncTotalThreads ?? null,
+      initialSyncSyncedThreads: syncMeta?.initialSyncSyncedThreads ?? null
     });
   } catch (error) {
     if (error instanceof Error && error.message === NO_GMAIL_TOKENS) {
