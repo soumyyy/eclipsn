@@ -13,11 +13,10 @@ import { fetchRecentThreads, getGmailProfile, NO_GMAIL_TOKENS, fetchThreadBody }
 import { embedEmailText } from '../services/embeddings';
 import { getUserId, requireUserId } from '../utils/request';
 import { ensureInitialGmailSync, formatGmailDate } from '../jobs/gmailInitialSync';
-import { getGmailSyncMetadata } from '../services/db';
+import { getGmailSyncMetadata, getUserProfile } from '../services/db';
 import { config } from '../config';
 import { attachGmailIdentity, establishSession, ensureSessionUser } from '../services/userService';
 import { generatePopupResponse } from '../utils/popupResponse';
-import { db } from '../services/db';
 
 const router = Router();
 const DEFAULT_LOOKBACK_HOURS = 48;
@@ -120,12 +119,9 @@ router.get('/callback', async (req, res) => {
     
     // Check if user needs onboarding or can go directly to main app
     try {
-      const { rows } = await db.query(
-        'SELECT full_name, preferred_name FROM user_profiles WHERE user_id = $1',
-        [userId]
-      );
+      const profile = await getUserProfile(userId);
       
-      if (rows.length > 0 && rows[0].full_name) {
+      if (profile && (profile as any).fullName) {
         // User has profile → redirect to main app
         console.log('[Gmail OAuth] User has profile, redirecting to main app');
         return res.redirect(`${config.frontendOrigin}/`);

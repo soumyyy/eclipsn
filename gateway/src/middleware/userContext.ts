@@ -47,7 +47,20 @@ export async function attachUserContext(req: Request, res: Response, next: NextF
     
     // Handle internal API calls
     if (hasInternalAccess(req)) {
-      console.log(`[Auth] Internal API call to ${req.path}`);
+      const headerUserId = req.header('x-user-id');
+      const queryUserId = typeof req.query.user_id === 'string' ? req.query.user_id : undefined;
+      const bodyUserId =
+        req.body && typeof req.body === 'object' && typeof (req.body as any).user_id === 'string'
+          ? (req.body as any).user_id
+          : undefined;
+      const internalUserId = headerUserId || queryUserId || bodyUserId;
+
+      if (internalUserId) {
+        req.userId = internalUserId;
+        console.log(`[Auth] Internal API call to ${req.path} (user: ${internalUserId})`);
+      } else {
+        console.warn(`[Auth] Internal API call to ${req.path} without user context`);
+      }
       return next();
     }
     

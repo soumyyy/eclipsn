@@ -219,8 +219,21 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
         body: formData
       });
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Upload failed');
+        let errorMessage = 'Upload failed';
+        try {
+          // Try to parse as JSON first
+          const data = await response.json();
+          errorMessage = data.error || `Upload failed (${response.status})`;
+        } catch {
+          // If not JSON, get text response
+          try {
+            const text = await response.text();
+            errorMessage = text || `Upload failed (${response.status})`;
+          } catch {
+            errorMessage = `Upload failed (${response.status})`;
+          }
+        }
+        throw new Error(errorMessage);
       }
       await loadStatus();
       await loadHistory();

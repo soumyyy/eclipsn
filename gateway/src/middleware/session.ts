@@ -16,6 +16,7 @@ export const sessionConfig = session({
     httpOnly: true,
     maxAge: config.sessionMaxAge,
     sameSite: 'lax', // Fix: Use 'lax' for development compatibility
+    domain: config.isProduction ? config.sessionCookieDomain : 'localhost', // Fix: Share cookies across localhost subdomains
   },
   // In production: add Redis store here
   // store: new RedisStore({ client: redisClient })

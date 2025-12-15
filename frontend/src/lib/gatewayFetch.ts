@@ -13,7 +13,7 @@ interface GatewayFetchOptions extends RequestInit {
  * Fetch wrapper that uses Next.js standard API configuration
  */
 export function gatewayFetch(path: string, options: GatewayFetchOptions = {}): Promise<Response> {
-  const { timeout = 10000, ...fetchOptions } = options;
+  const { timeout = 45000, ...fetchOptions } = options;
   
   // Use Next.js API configuration - no custom logic needed
   const url = getApiUrl(path);
@@ -24,13 +24,17 @@ export function gatewayFetch(path: string, options: GatewayFetchOptions = {}): P
   
   if (['POST', 'PUT', 'PATCH'].includes(fetchOptions.method?.toUpperCase() || 'GET')) {
     if (!headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
+      // Only set application/json if body is not FormData
+      // FormData should use browser's automatic multipart/form-data
+      if (!(fetchOptions.body instanceof FormData)) {
+        headers.set('Content-Type', 'application/json');
+      }
     }
   }
   
   // Simple timeout using AbortController
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  const timeoutId = timeout > 0 ? setTimeout(() => controller.abort(), timeout) : null;
   
   const finalOptions: RequestInit = {
     ...fetchOptions,
@@ -40,7 +44,9 @@ export function gatewayFetch(path: string, options: GatewayFetchOptions = {}): P
   };
   
   return fetch(url, finalOptions).finally(() => {
-    clearTimeout(timeoutId);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   });
 }
 
