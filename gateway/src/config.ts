@@ -55,7 +55,7 @@ function resolveSessionMaxAge(): number {
       return hours * 60 * 60 * 1000;
     }
   }
-  return isProduction ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000; // 1 day prod, 1 week dev
+  return 7 * 24 * 60 * 60 * 1000; // default: 7 days
 }
 
 // Validate on module load

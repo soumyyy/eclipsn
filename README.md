@@ -45,10 +45,61 @@ Browser → Gateway (`/api/chat`) → Brain (`/chat`) → tools (memory + Gmail 
 
 Visit http://localhost:3000, send a chat message, and the UI will proxy through the gateway to the brain’s stubbed agent. Supabase-hosted databases work the same way; set `DATABASE_SSL=true` so the gateway pg client negotiates TLS.
 
+## Architecture & Components
+- **Frontend (Next.js/React)** – chat surface, sidebar, bespoke memory modal. Uses `SessionProvider` to hydrate Gmail/profile status and renders Markdown+math via `react-markdown`, `remark-gfm`, `remark-math`, `rehype-katex`.
+- **Gateway (Node/Express + Postgres + Redis)** – OAuth, Gmail proxy, bespoke upload pipeline, session management (Redis via Upstash), and REST APIs for the frontend and the brain.
+- **Brain (FastAPI + LangChain)** – orchestrates the chat agent, Tavily web search, bespoke FAISS retrieval, Gmail tools, and profile updates.
+- **Database (Postgres/Supabase w/ pgvector)** – stores users, sessions, Gmail metadata/embeddings/bodies, bespoke memory ingestions/chunks, tasks, and profile data.
+
+## Feature Highlights
+
+### Bespoke Memory
+- Drag-and-drop Markdown uploads; `multer` stores files under `tmp/memory_uploads`.
+- Gateway chunks files, inserts metadata into `memory_chunks`, and triggers `/memory/index` so the brain embeds pending chunks and maintains per-user FAISS indices.
+- History view shows batch names & progress; per-ingestion delete plus “Clear All” reset stale data and rebuild FAISS.
+- `/api/memory` endpoints expose status, history, graph slices, and ingestion controls.
+
+### Gmail Integration
+- Full OAuth 2.0 flow (`/api/gmail/connect`/`/callback`) with encrypted refresh/access tokens.
+- Initial sync fetches up to one year of threads (`fetchRecentThreads`), stores summaries in `gmail_threads`, and embeddings in `gmail_thread_embeddings`.
+- `/api/gmail/threads` defaults to a 48h window (override via `?hours=`) and returns meta counts (total/important/promotions).
+- Semantic search (`/api/gmail/threads/search`) returns structured results; `/api/gmail/threads/:threadId` fetches cached bodies.
+- Brain merges Gmail snippets with bespoke memories via reciprocal-rank fusion and can fetch full threads on demand.
+- URL auto-context: Tavily pulls summaries when a chat message includes URLs; results appear in the assistant’s `sources`.
+
+## Key Tables & API Surface
+- `memory_ingestions`, `memory_chunks`, `memory_thread_bodies`, `gmail_threads`, `gmail_thread_embeddings`, `gmail_tokens`, `tasks`, `user_profiles`.
+- Gateway routes:
+  - `/api/memory/upload`, `/status`, `/history`, `/graph`, `/clear`.
+  - `/api/gmail/threads`, `/threads/search`, `/threads/:id`, `/status`, `/disconnect`, `/threads/full-sync`.
+  - `/api/profile` (GET/POST), `/api/profile/logout`, `/api/profile/account` (delete).
+  - `/api/chat` proxies to the brain.
+
+## Brain Tooling
+- `memory_lookup`: bespoke FAISS + Gmail fallback.
+- `gmail_inbox`: recency summaries when users ask “what’s new”.
+- `gmail_semantic_search`: topic-based Gmail retrieval.
+- `gmail_thread_detail`: bodies cached in gateway.
+- `web_search`: Tavily general search with URL source summaries.
+- `profile_update`: structured profile patching (field/value or free-form note).
+
+## Operational Notes
+- Memory indexing runs inside `/memory/index` using AsyncPG + OpenAI embeddings; FAISS cache invalidation ensures deletions rebuild indexes.
+- Gateway infers bespoke batch names from folder paths, normalizes profile notes via shared helpers, and logs initial Gmail sync counts.
+- Supabase/Postgres schema lives in `db/schema.sql`; any ad‑hoc migrations go into `db/migrations/`.
+- Sessions default to 7 days, backed by Redis (Upstash). Cookies are httpOnly and honor `USER_COOKIE_*` env overrides.
+- Gmail tokens are AES‑256‑GCM encrypted at rest (`GMAIL_TOKEN_ENC_KEY`), and any `invalid_grant` responses delete tokens automatically.
+
+## Future Enhancements
+- Graph visualization refinements once the underlying graph APIs stabilize.
+- Tagging/filtering for bespoke uploads and citation surfacing inside chat responses.
+- Sidebar indicators for bespoke ingestion progress (upload, indexing, graph).
+- Hybrid graph-based UI/workflows once the V2 data infra ships.
+
 ## Gmail Integration Notes
 - Uses OAuth 2.0 with read-only Gmail scope (`https://www.googleapis.com/auth/gmail.readonly`).
 - Configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in `.env`.
-- Tokens are stored in `gmail_tokens` table (currently in plaintext; future work will encrypt them).
+- Refresh/access tokens are stored encrypted (AES-256-GCM) in `gmail_tokens`; set `GMAIL_TOKEN_ENC_KEY` to keep them safe.
 - After connecting Gmail (`GET /api/gmail/connect`), call `GET /api/gmail/threads?limit=5` to sync the latest threads into Postgres and return summaries to the UI/brain layer.
 - Set `GATEWAY_INTERNAL_URL` so the Python brain can call the gateway when it needs Gmail context during a chat.
 - The gateway now runs background jobs: an incremental sync every 10 minutes (`newer_than:10m` filter) and a midnight cleanup that deletes expired Gmail summaries.

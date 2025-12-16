@@ -127,7 +127,7 @@ export function Sidebar() {
             <div className="gmail-sync-card">
               <div className="gmail-sync-header">
                 <p className="gmail-sync-title">Setting up your Eclipsn</p>
-                <p className="gmail-sync-subtitle">{disconnecting ? 'Disconnecting Gmail…' : syncLabel}</p>
+                {/* <p className="gmail-sync-subtitle">{disconnecting ? 'Disconnecting Gmail…' : syncLabel}</p> */}
               </div>
               <div className={`gmail-sync-progress ${syncPercent === null ? 'indeterminate' : ''}`}>
                 <div
