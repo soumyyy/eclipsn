@@ -574,6 +574,16 @@ body {
   position: relative;
 }
 
+.memory-modal .profile-modal-body {
+  width: 100%;
+  overflow-y: auto;
+  padding-right: 12px;
+}
+
+.memory-modal .memory-columns {
+  gap: 24px;
+}
+
 .profile-modal-header {
   display: flex;
   justify-content: flex-start;
@@ -1045,13 +1055,16 @@ body {
   cursor: not-allowed;
 }
 
-.profile-tab-content::-webkit-scrollbar {
+.profile-tab-content::-webkit-scrollbar,
+.memory-modal .profile-modal-body::-webkit-scrollbar {
   width: 6px;
 }
-.profile-tab-content::-webkit-scrollbar-track {
+.profile-tab-content::-webkit-scrollbar-track,
+.memory-modal .profile-modal-body::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05);
 }
-.profile-tab-content::-webkit-scrollbar-thumb {
+.profile-tab-content::-webkit-scrollbar-thumb,
+.memory-modal .profile-modal-body::-webkit-scrollbar-thumb {
   background: rgba(215, 206, 185, 0.3);
   border-radius: 999px;
 }
@@ -1303,7 +1316,7 @@ body {
   display: none;
 }
 
- .memory-columns {
+.memory-columns {
   display: grid;
   grid-template-columns: minmax(320px, 360px) minmax(360px, 1fr);
   gap: 20px;
@@ -1333,6 +1346,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.memory-right-column {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
 }
 
 .memory-left-column.empty {

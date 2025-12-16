@@ -13,6 +13,8 @@ import { getAbsoluteApiUrl } from '@/lib/api';
 export function Sidebar() {
   const { session, refreshSession, updateGmailStatus } = useSessionContext();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
+  const profile: UserProfile | null = session?.profile ?? null;
   const [disconnecting, setDisconnecting] = useState(false);
   const [isBespokeMemoryModalOpen, setIsBespokeMemoryModalOpen] = useState(false);
   const [localIdentity, setLocalIdentity] = useState<{ name: string }>({ name: '' });
@@ -29,8 +31,6 @@ export function Sidebar() {
       refreshSession();
     }
   }, [isProfileOpen, refreshSession]);
-  const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
-  const profile: UserProfile | null = session?.profile ?? null;
   const initialSyncPending =
     gmailStatus.connected &&
     !!gmailStatus.initialSyncStartedAt &&
@@ -126,8 +126,8 @@ export function Sidebar() {
           {initialSyncPending && (
             <div className="gmail-sync-card">
               <div className="gmail-sync-header">
-                <p className="gmail-sync-title">Setting up your Eclipsn</p>
-                {/* <p className="gmail-sync-subtitle">{disconnecting ? 'Disconnecting Gmail…' : syncLabel}</p> */}
+                <p className="gmail-sync-title">Setting up</p>
+                <p className="gmail-sync-subtitle">{disconnecting ? 'Disconnecting Gmail…' : syncLabel}</p>
               </div>
               <div className={`gmail-sync-progress ${syncPercent === null ? 'indeterminate' : ''}`}>
                 <div

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSessionContext } from '@/components/SessionProvider';
 import {
@@ -547,43 +547,57 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
     return renderProfileContent();
   };
 
-  const handleTabScroll = (event: React.WheelEvent<HTMLDivElement>) => {
+  const handleTabScroll = useCallback(
+    (event: WheelEvent) => {
+      const container = tabContentRef.current;
+      if (!container) return;
+      const { deltaY } = event;
+      const canScrollUp = container.scrollTop > 0;
+      const canScrollDown =
+        container.scrollTop + container.clientHeight < container.scrollHeight - 1;
+      const idx = tabsOrder.indexOf(activeTab);
+      const threshold = 180;
+
+      if (deltaY > 0 && !canScrollDown) {
+        scrollMomentumRef.current += deltaY;
+        if (scrollMomentumRef.current >= threshold && idx < tabsOrder.length - 1) {
+          event.preventDefault();
+          scrollMomentumRef.current = 0;
+          setActiveTab(tabsOrder[idx + 1]);
+          requestAnimationFrame(() => {
+            if (tabContentRef.current) {
+              tabContentRef.current.scrollTop = 0;
+            }
+          });
+        }
+      } else if (deltaY < 0 && !canScrollUp) {
+        scrollMomentumRef.current += deltaY;
+        if (scrollMomentumRef.current <= -threshold && idx > 0) {
+          event.preventDefault();
+          scrollMomentumRef.current = 0;
+          setActiveTab(tabsOrder[idx - 1]);
+          requestAnimationFrame(() => {
+            if (tabContentRef.current) {
+              tabContentRef.current.scrollTop = tabContentRef.current.scrollHeight;
+            }
+          });
+        }
+      } else {
+        scrollMomentumRef.current = 0;
+      }
+    },
+    [activeTab]
+  );
+
+  useEffect(() => {
     const container = tabContentRef.current;
     if (!container) return;
-    const { deltaY } = event;
-    const canScrollUp = container.scrollTop > 0;
-    const canScrollDown = container.scrollTop + container.clientHeight < container.scrollHeight - 1;
-    const idx = tabsOrder.indexOf(activeTab);
-    const threshold = 180;
-
-    if (deltaY > 0 && !canScrollDown) {
-      scrollMomentumRef.current += deltaY;
-      if (scrollMomentumRef.current >= threshold && idx < tabsOrder.length - 1) {
-        event.preventDefault();
-        scrollMomentumRef.current = 0;
-        setActiveTab(tabsOrder[idx + 1]);
-        requestAnimationFrame(() => {
-          if (tabContentRef.current) {
-            tabContentRef.current.scrollTop = 0;
-          }
-        });
-      }
-    } else if (deltaY < 0 && !canScrollUp) {
-      scrollMomentumRef.current += deltaY;
-      if (scrollMomentumRef.current <= -threshold && idx > 0) {
-        event.preventDefault();
-        scrollMomentumRef.current = 0;
-        setActiveTab(tabsOrder[idx - 1]);
-        requestAnimationFrame(() => {
-          if (tabContentRef.current) {
-            tabContentRef.current.scrollTop = tabContentRef.current.scrollHeight;
-          }
-        });
-      }
-    } else {
-      scrollMomentumRef.current = 0;
-    }
-  };
+    const listener = (event: WheelEvent) => handleTabScroll(event);
+    container.addEventListener('wheel', listener, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', listener);
+    };
+  }, [handleTabScroll]);
 
   return (
     <>
@@ -653,7 +667,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
               </button>
             ))}
           </aside>
-          <div className="profile-tab-content" ref={tabContentRef} onWheel={handleTabScroll}>
+          <div className="profile-tab-content" ref={tabContentRef}>
             {renderActiveContent()}
           </div>
         </div>

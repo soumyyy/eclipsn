@@ -23,6 +23,11 @@ export type SessionSnapshot = {
   profile: UserProfile | null;
 };
 
+function normalizeProfile(payload: unknown): UserProfile | null {
+  if (!payload || typeof payload !== 'object') return null;
+  return payload as UserProfile;
+}
+
 function normalizeGmailStatus(payload: unknown): GmailStatus {
   if (!payload || typeof payload !== 'object') {
     return { connected: false };
@@ -50,11 +55,6 @@ function normalizeGmailStatus(payload: unknown): GmailStatus {
           ? null
           : undefined
   };
-}
-
-function normalizeProfile(payload: unknown): UserProfile | null {
-  if (!payload || typeof payload !== 'object') return null;
-  return payload as UserProfile;
 }
 
 export async function fetchSessionSnapshot(): Promise<SessionSnapshot> {

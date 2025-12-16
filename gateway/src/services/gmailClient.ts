@@ -82,6 +82,28 @@ export interface FetchThreadsResult {
   resultSizeEstimate?: number;
 }
 
+export async function estimateThreadCount(
+  userId: string,
+  filters: ThreadFilters = {}
+): Promise<number | null> {
+  try {
+    const gmail = await getAuthorizedGmail(userId);
+    const query = filters.customQuery
+      ? filters.customQuery
+      : buildQuery(filters.startDate, filters.endDate, filters.importanceOnly !== false);
+    const response = await gmail.users.threads.list({
+      userId: 'me',
+      maxResults: 1,
+      q: query
+    });
+    const estimate = response.data.resultSizeEstimate;
+    return typeof estimate === 'number' ? estimate : null;
+  } catch (error) {
+    await handleGmailAuthError(userId, error);
+    throw error;
+  }
+}
+
 export async function fetchRecentThreads(
   userId: string,
   maxResults = 20,
