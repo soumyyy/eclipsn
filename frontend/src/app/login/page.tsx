@@ -6,6 +6,7 @@ import { GoogleSignInButton } from '@/components/login/GoogleSignInButton';
 import { OnboardingPrompt, type OnboardingQuestion } from '@/components/login/OnboardingPrompt';
 import { VideoBackground } from '@/components/login/VideoBackground';
 import { useSessionContext } from '@/components/SessionProvider';
+import { useGmailStatus } from '@/hooks/useGmailStatus';
 import { hasActiveSession } from '@/lib/session';
 import { gatewayFetch } from '@/lib/gatewayFetch';
 import { getAbsoluteApiUrl } from '@/lib/api';
@@ -29,6 +30,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { session, loading: sessionLoading, refreshSession } = useSessionContext();
+  const { status: gmailStatus } = useGmailStatus();
   const [stage, setStage] = useState<Stage>(() => {
     const stageParam = searchParams.get('stage');
     return stageParam === 'onboarding' ? 'onboarding' : 'signin';
@@ -48,10 +50,10 @@ export default function LoginPage() {
       router.replace('/');
       return;
     }
-    if (session?.gmail.connected && !session?.profile) {
+    if (gmailStatus.connected && !session?.profile) {
       setStage((prev) => (prev === 'signin' ? 'onboarding' : prev));
     }
-  }, [router, session, sessionLoading]);
+  }, [router, session, sessionLoading, gmailStatus.connected]);
 
 
   const handleGoogleSignIn = useCallback(() => {

@@ -8,7 +8,6 @@ import {
   getGmailTokens,
   deleteGmailTokens,
   findOrCreateUserByGmailEmail,
-  getGmailSyncMetadata,
   getUserProfile,
   markInitialGmailSync
 } from '../services/db';
@@ -17,8 +16,14 @@ import { embedEmailText } from '../services/embeddings';
 import { getUserId, requireUserId } from '../utils/request';
 import { ensureInitialGmailSync, formatGmailDate } from '../jobs/gmailInitialSync';
 import { config } from '../config';
-import { attachGmailIdentity, establishSession, ensureSessionUser } from '../services/userService';
+import { attachGmailIdentity, establishSession, ensureSessionUser, getSessionUserId } from '../services/userService';
 import { generatePopupResponse } from '../utils/popupResponse';
+import {
+  addGmailStatusListener,
+  DEFAULT_GMAIL_STATUS,
+  emitGmailStatusUpdate,
+  getGmailSyncStatus
+} from '../services/gmailStatus';
 
 const router = Router();
 const DEFAULT_LOOKBACK_HOURS = 48;
@@ -108,6 +113,7 @@ router.get('/callback', async (req, res) => {
       refreshToken: tokens.refresh_token,
       expiry
     });
+    void emitGmailStatusUpdate(userId);
 
     // Establish secure session
     await establishSession(req, res, userId);
@@ -159,6 +165,13 @@ router.get('/threads', async (req, res) => {
   const lookbackHours = parseInt(req.query.hours as string, 10) || DEFAULT_LOOKBACK_HOURS;
   const startDate = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
   const userId = requireUserId(req);
+  const isInternalRequest = Boolean((req as any).internal);
+  if (!isInternalRequest) {
+    const sessionUserId = getSessionUserId(req);
+    if (!sessionUserId || sessionUserId !== userId) {
+      return res.status(401).json({ error: 'Session expired' });
+    }
+  }
   try {
     const { threads } = await fetchRecentThreads(userId, maxResults, {
       importanceOnly,
@@ -188,31 +201,62 @@ router.get('/threads', async (req, res) => {
 router.get('/status', async (req, res) => {
   const userId = getUserId(req);
   if (!userId) {
-    return res.json({ connected: false });
+    return res.json(DEFAULT_GMAIL_STATUS);
   }
   try {
-    const tokens = await getGmailTokens(userId);
-    if (!tokens) {
-      return res.json({ connected: false });
+    const baseStatus = await getGmailSyncStatus(userId);
+    if (!baseStatus.connected) {
+      return res.json(baseStatus);
     }
     const profile = await getGmailProfile(userId);
-    const syncMeta = await getGmailSyncMetadata(userId);
     return res.json({
-      connected: true,
+      ...baseStatus,
       email: profile.email,
       avatarUrl: profile.avatarUrl,
-      name: profile.name,
-      initialSyncStartedAt: syncMeta?.initialSyncStartedAt ?? null,
-      initialSyncCompletedAt: syncMeta?.initialSyncCompletedAt ?? null,
-      initialSyncTotalThreads: syncMeta?.initialSyncTotalThreads ?? null,
-      initialSyncSyncedThreads: syncMeta?.initialSyncSyncedThreads ?? null
+      name: profile.name
     });
   } catch (error) {
     if (error instanceof Error && error.message === NO_GMAIL_TOKENS) {
-      return res.json({ connected: false });
+      return res.json(DEFAULT_GMAIL_STATUS);
     }
     console.error('Failed to fetch Gmail status', error);
-    return res.json({ connected: false });
+    return res.json(DEFAULT_GMAIL_STATUS);
+  }
+});
+
+router.get('/status/stream', async (req, res) => {
+  const userId = requireUserId(req);
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Connection', 'keep-alive');
+  const streamRes = res as any;
+  if (typeof streamRes.flushHeaders === 'function') {
+    streamRes.flushHeaders();
+  } else if (typeof streamRes.flush === 'function') {
+    streamRes.flush();
+  }
+
+  const send = (payload: any) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  const unsubscribe = addGmailStatusListener(userId, send);
+  const heartbeat = setInterval(() => {
+    res.write(':heartbeat\n\n');
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+    res.end();
+  });
+
+  try {
+    const snapshot = await getGmailSyncStatus(userId);
+    send(snapshot);
+  } catch (error) {
+    console.error('Failed to send initial Gmail status snapshot', error);
+    send(DEFAULT_GMAIL_STATUS);
   }
 });
 
@@ -249,6 +293,7 @@ router.post('/disconnect', async (req, res) => {
       totalThreads: 0,
       syncedThreads: 0
     });
+    void emitGmailStatusUpdate(userId);
     
     console.log('[Gmail Disconnect] Gmail successfully disconnected for user:', userId);
     return res.json({ status: 'disconnected', timestamp: new Date().toISOString() });
@@ -276,6 +321,13 @@ router.post('/threads/full-sync', async (req, res) => {
   }
 
   const userId = requireUserId(req);
+  const isInternalRequest = Boolean((req as any).internal);
+  if (!isInternalRequest) {
+    const sessionUserId = getSessionUserId(req);
+    if (!sessionUserId || sessionUserId !== userId) {
+      return res.status(401).json({ error: 'Session expired' });
+    }
+  }
   try {
     let pageToken: string | undefined;
     let synced = 0;

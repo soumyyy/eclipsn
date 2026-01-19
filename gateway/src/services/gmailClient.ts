@@ -13,8 +13,15 @@ import {
   deleteGmailTokens
 } from './db';
 import { embedEmailText } from './embeddings';
+import { areGmailJobsDisabled } from './gmailJobControl';
+import { emitGmailStatusUpdate } from './gmailStatus';
 
 export const NO_GMAIL_TOKENS = 'NO_GMAIL_TOKENS';
+export const GMAIL_JOBS_DISABLED = 'GMAIL_JOBS_DISABLED';
+const THREAD_METADATA_WORKERS = Math.max(
+  1,
+  parseInt(process.env.GMAIL_THREAD_METADATA_WORKERS || '5', 10)
+);
 
 export interface GmailThreadSummary extends GmailThreadRecord {
   link: string;
@@ -23,6 +30,20 @@ export interface GmailThreadSummary extends GmailThreadRecord {
   category?: string;
   labelIds?: string[];
   labelNames?: string[];
+}
+
+async function ensureGmailUserStillActive(userId: string): Promise<void> {
+  if (areGmailJobsDisabled(userId)) {
+    const error = new Error(GMAIL_JOBS_DISABLED);
+    error.name = GMAIL_JOBS_DISABLED;
+    throw error;
+  }
+  const tokens = await getGmailTokens(userId);
+  if (!tokens) {
+    const noTokens = new Error(NO_GMAIL_TOKENS);
+    noTokens.name = NO_GMAIL_TOKENS;
+    throw noTokens;
+  }
 }
 
 async function getAuthorizedOAuthClient(userId: string) {
@@ -110,6 +131,7 @@ export async function fetchRecentThreads(
   filters: ThreadFilters = {}
 ): Promise<FetchThreadsResult> {
   try {
+    await ensureGmailUserStillActive(userId);
     const gmail = await getAuthorizedGmail(userId);
     const fetchLimit = Math.min(filters.maxResults ?? maxResults ?? 20, 1000);
     const query = filters.customQuery
@@ -123,56 +145,98 @@ export async function fetchRecentThreads(
     });
     const resultSizeEstimate =
       typeof threadList.data.resultSizeEstimate === 'number' ? threadList.data.resultSizeEstimate : undefined;
-    const summaries: GmailThreadSummary[] = [];
     const counts: Record<string, number> = {};
+    const threadEntries = threadList.data.threads?.map((thread, index) => ({ thread, index })) ?? [];
 
-    if (!threadList.data.threads) {
-      return { threads: summaries, nextPageToken: undefined, counts, resultSizeEstimate };
+    if (!threadEntries.length) {
+      console.log(`[Gmail Sync] Gmail returned 0 threads for user ${userId} (pageToken=${filters.pageToken ?? 'start'})`);
+      return { threads: [], nextPageToken: threadList.data.nextPageToken ?? undefined, counts, resultSizeEstimate };
     }
 
-    for (const thread of threadList.data.threads) {
-      if (!thread.id) continue;
-      const detail = await gmail.users.threads.get({
-        userId: 'me',
-        id: thread.id,
-        format: 'metadata',
-        metadataHeaders: ['Subject', 'From', 'Date', 'To']
-      });
+    console.log(
+      `[Gmail Sync] Preparing metadata for ${threadEntries.length} Gmail threads for user ${userId} (pageToken=${filters.pageToken ?? 'start'})`
+    );
 
-      const lastMessage = detail.data.messages?.[detail.data.messages.length - 1];
-      const headers = lastMessage?.payload?.headers || [];
-      const subject = headers.find((h) => h.name === 'Subject')?.value || '(no subject)';
-      const sender = headers.find((h) => h.name === 'From')?.value || 'Unknown sender';
-      const snippet = detail.data.snippet || lastMessage?.snippet || '';
-      const lastMessageAt = lastMessage?.internalDate
-        ? new Date(Number(lastMessage.internalDate))
-        : undefined;
-      const labelIds = lastMessage?.labelIds || detail.data.messages?.[0]?.labelIds || [];
-      const labelNames = mapLabelIds(labelIds);
-      const { importanceScore, category, isPromotional } = scoreThread(subject, snippet, sender, labelNames || []);
+    const summarySlots: Array<GmailThreadSummary | null> = new Array(threadEntries.length).fill(null);
+    let skippedThreads = 0;
 
-      if (filters.importanceOnly && isPromotional) {
-        continue;
+    async function buildSummary(entry: { thread: any; index: number }) {
+      const { thread, index } = entry;
+      if (!thread.id) {
+        skippedThreads += 1;
+        return;
       }
+      try {
+        const detail = await gmail.users.threads.get({
+          userId: 'me',
+          id: thread.id,
+          format: 'metadata',
+          metadataHeaders: ['Subject', 'From', 'Date', 'To']
+        });
+        const lastMessage = detail.data.messages?.[detail.data.messages.length - 1];
+        const headers = lastMessage?.payload?.headers || [];
+        const subject = headers.find((h) => h.name === 'Subject')?.value || '(no subject)';
+        const sender = headers.find((h) => h.name === 'From')?.value || 'Unknown sender';
+        const snippet = detail.data.snippet || lastMessage?.snippet || '';
+        const lastMessageAt = lastMessage?.internalDate ? new Date(Number(lastMessage.internalDate)) : undefined;
+        const labelIds = lastMessage?.labelIds || detail.data.messages?.[0]?.labelIds || [];
+        const labelNames = mapLabelIds(labelIds);
+        const { importanceScore, category, isPromotional } = scoreThread(subject, snippet, sender, labelNames || []);
 
-      summaries.push({
-        threadId: thread.id,
-        subject,
-        snippet,
-        sender,
-        category,
-        importanceScore,
-        lastMessageAt: lastMessageAt ?? null,
-        link: `https://mail.google.com/mail/u/0/#inbox/${thread.id}`,
-        labelIds,
-        labelNames,
-        expiresAt: computeExpiry(category, lastMessageAt ?? new Date())
-      });
-      counts[category] = (counts[category] || 0) + 1;
+        if (filters.importanceOnly && isPromotional) {
+          skippedThreads += 1;
+          return;
+        }
+
+        const summary: GmailThreadSummary = {
+          threadId: thread.id,
+          subject,
+          snippet,
+          sender,
+          category,
+          importanceScore,
+          lastMessageAt: lastMessageAt ?? null,
+          link: `https://mail.google.com/mail/u/0/#inbox/${thread.id}`,
+          labelIds,
+          labelNames,
+          expiresAt: computeExpiry(category, lastMessageAt ?? new Date())
+        };
+        summarySlots[index] = summary;
+        counts[category] = (counts[category] || 0) + 1;
+      } catch (threadError) {
+        skippedThreads += 1;
+        console.error(`[Gmail Sync] Failed to fetch Gmail thread ${thread.id} for user ${userId}`, threadError);
+      }
     }
 
+    const queue = [...threadEntries];
+    async function runWorker() {
+      while (queue.length) {
+        const next = queue.shift();
+        if (!next) break;
+        await buildSummary(next);
+      }
+    }
+
+    const workerCount = Math.min(THREAD_METADATA_WORKERS, queue.length);
+    await Promise.all(Array.from({ length: workerCount || 1 }, () => runWorker()));
+
+    const summaries = summarySlots.filter((item): item is GmailThreadSummary => Boolean(item));
+
+    console.log(
+      `[Gmail Sync] Processed ${summaries.length}/${threadEntries.length} Gmail threads for user ${userId} (skipped ${skippedThreads})`
+    );
+
+    await ensureGmailUserStillActive(userId);
     const rowIds = await saveGmailThreads(userId, summaries);
+    await ensureGmailUserStillActive(userId);
+    const persisted = rowIds.filter((id) => Boolean(id)).length;
+    console.log(`[Gmail Sync] Saved ${persisted}/${summaries.length} Gmail thread rows for user ${userId}`);
     for (let idx = 0; idx < summaries.length; idx += 1) {
+      if (areGmailJobsDisabled(userId)) {
+        console.info(`[gmail] Skipping remaining Gmail embedding writes for user ${userId} (jobs disabled)`);
+        break;
+      }
       const summary = summaries[idx];
       const rowId = rowIds[idx];
       if (!rowId) continue;
@@ -395,6 +459,7 @@ async function handleGmailAuthError(userId: string, error: unknown): Promise<nev
     console.warn(`[Gmail] OAuth tokens revoked for user ${userId}, removing credentials`);
     try {
       await deleteGmailTokens(userId);
+      void emitGmailStatusUpdate(userId);
     } catch (cleanupError) {
       console.warn('[Gmail] Failed to delete invalid tokens', cleanupError);
     }

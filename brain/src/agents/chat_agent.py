@@ -40,6 +40,13 @@ class ProfileUpdateInput(BaseModel):
             values["value"] = ""
         return values
 
+
+class GmailInboxInput(BaseModel):
+    query: Optional[str] = Field(
+        default=None,
+        description="Optional filter describing what kind of recent emails to summarize. Leave blank to summarize the most recent threads."
+    )
+
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are Eclipsn, a personal agent for a single user. You know about the user from past conversations and, soon, from their email. Your job is to help summarize information, extract tasks, and keep track of what matters to them. Use memories when helpful, call the web_search tool whenever you need up-to-date facts or entertainment news. If the user references anything that may have changed after 2024 (news, entertainment, finance, product releases, etc.), you MUST call web_search before answering.
@@ -97,8 +104,8 @@ def _build_tools(user_id: str) -> List[Tool]:
     async def web_coro(q: str) -> str:
         return await _web_tool_output(q)
 
-    async def gmail_coro(q: str) -> str:
-        return await _gmail_tool_output(user_id, q)
+    async def gmail_coro(query: str | None = None) -> str:
+        return await _gmail_tool_output(user_id, query or "")
 
     async def gmail_semantic_coro(q: str) -> str:
         return await gmail_semantic_search_tool(user_id=user_id, query=q, limit=5)
@@ -130,11 +137,12 @@ def _build_tools(user_id: str) -> List[Tool]:
             coroutine=web_coro,
             description="Fetch recent information from the internet when the user asks about current events, entertainment news, or unknown facts."
         ),
-        Tool(
+        StructuredTool(
             name="gmail_inbox",
-            func=lambda q: "Gmail inbox lookup available only in async mode.",
+            func=lambda query=None: "Gmail inbox lookup available only in async mode.",
             coroutine=gmail_coro,
-            description="Summarize the user's Gmail inbox when they ask about new emails, reminders, or anything in Gmail."
+            args_schema=GmailInboxInput,
+            description="Summarize the user's Gmail inbox when they ask about new emails, reminders, or anything in Gmail. Provide an optional natural-language query to filter, or omit it to get recent threads."
         ),
         Tool(
             name="gmail_semantic_search",

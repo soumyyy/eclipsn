@@ -10,8 +10,6 @@ import {
   useMemo,
   memo
 } from 'react';
-import { useSessionContext } from '@/components/SessionProvider';
-import type { GmailStatus } from '@/lib/session';
 import { gatewayFetch } from '@/lib/gatewayFetch';
 const FILE_GRAPH_LIMIT = 320;
 
@@ -82,8 +80,6 @@ interface QueuedFile {
 }
 
 export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
-  const { session } = useSessionContext();
-  const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
   const [fileQueue, setFileQueue] = useState<QueuedFile[]>([]);
   const [uploadStage, setUploadStage] = useState<UploadStage>('idle');
   const [isUploading, setIsUploading] = useState(false);

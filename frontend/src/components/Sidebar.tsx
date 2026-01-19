@@ -1,19 +1,25 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BespokeMemoryModal } from './BespokeMemoryModal';
 import { ProfileModal } from './ProfileModal';
 import { ModalPortal } from './ModalPortal';
 import { useSessionContext } from '@/components/SessionProvider';
-import type { GmailStatus } from '@/lib/session';
+import { useGmailStatus } from '@/hooks/useGmailStatus';
 import type { UserProfile } from '@/lib/profile';
 import { gatewayFetch } from '@/lib/gatewayFetch';
 import { getAbsoluteApiUrl } from '@/lib/api';
 
 export function Sidebar() {
-  const { session, refreshSession, updateGmailStatus } = useSessionContext();
+  const { session, refreshSession } = useSessionContext();
+  const {
+    status: gmailStatus,
+    refresh: refreshGmailStatus,
+    syncPercent,
+    syncLabel,
+    shouldShowSetupBanner
+  } = useGmailStatus();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const gmailStatus: GmailStatus = session?.gmail ?? { connected: false };
   const profile: UserProfile | null = session?.profile ?? null;
   const [disconnecting, setDisconnecting] = useState(false);
   const [isBespokeMemoryModalOpen, setIsBespokeMemoryModalOpen] = useState(false);
@@ -31,36 +37,6 @@ export function Sidebar() {
       refreshSession();
     }
   }, [isProfileOpen, refreshSession]);
-  const initialSyncPending =
-    gmailStatus.connected &&
-    !!gmailStatus.initialSyncStartedAt &&
-    !gmailStatus.initialSyncCompletedAt;
-  const totalThreads =
-    typeof gmailStatus.initialSyncTotalThreads === 'number' ? gmailStatus.initialSyncTotalThreads : null;
-  const syncedThreads =
-    typeof gmailStatus.initialSyncSyncedThreads === 'number' ? gmailStatus.initialSyncSyncedThreads : null;
-  const syncPercent =
-    totalThreads && totalThreads > 0 && typeof syncedThreads === 'number'
-      ? Math.min(100, Math.round((Math.min(syncedThreads, totalThreads) / totalThreads) * 100))
-      : null;
-  const syncLabel = useMemo(() => {
-    if (typeof syncedThreads === 'number' && typeof totalThreads === 'number' && totalThreads > 0) {
-      return `${Math.min(syncedThreads, totalThreads).toLocaleString()} / ${totalThreads.toLocaleString()} threads`;
-    }
-    if (typeof syncedThreads === 'number') {
-      return `${syncedThreads.toLocaleString()} threads synced`;
-    }
-    return 'Syncing Gmail…';
-  }, [syncedThreads, totalThreads]);
-
-  useEffect(() => {
-    if (!initialSyncPending || disconnecting) return;
-    const interval = setInterval(() => {
-      refreshSession();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [initialSyncPending, disconnecting, refreshSession]);
-
   async function handleGmailAction() {
     if (gmailStatus.connected) {
       if (disconnecting) return;
@@ -71,13 +47,13 @@ export function Sidebar() {
         });
         if (!response.ok) throw new Error('Failed to disconnect Gmail');
         await gatewayFetch('profile/logout', { method: 'POST' }).catch(() => undefined);
-        updateGmailStatus({ connected: false });
         if (typeof window !== 'undefined') {
           localStorage.removeItem('EclipsnOnboarded');
           localStorage.removeItem('EclipsnProfileName');
           localStorage.removeItem('EclipsnProfileNote');
           window.location.href = '/login';
         }
+        await refreshGmailStatus();
       } catch (error) {
         console.error('Failed to disconnect Gmail', error);
       } finally {
@@ -123,11 +99,11 @@ export function Sidebar() {
               </div>
             </button>
           </div>
-          {initialSyncPending && (
+          {shouldShowSetupBanner && (
             <div className="gmail-sync-card">
               <div className="gmail-sync-header">
                 <p className="gmail-sync-title">Setting up</p>
-                <p className="gmail-sync-subtitle">{disconnecting ? 'Disconnecting Gmail…' : syncLabel}</p>
+                {/* <p className="gmail-sync-subtitle">{disconnecting ? 'Disconnecting Gmail…' : syncLabel}</p> */}
               </div>
               <div className={`gmail-sync-progress ${syncPercent === null ? 'indeterminate' : ''}`}>
                 <div

@@ -9,7 +9,7 @@ import {
   type ProfileNote,
   type UserProfile
 } from '@/lib/profile';
-import type { GmailStatus } from '@/lib/session';
+import { useGmailStatus } from '@/hooks/useGmailStatus';
 import { gatewayFetch } from '@/lib/gatewayFetch';
 
 interface ProfileModalProps {
@@ -46,10 +46,10 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deletePhrase = 'delete account';
   const deleteInputMatches = deleteConfirmationText.trim().toLowerCase() === deletePhrase;
-  const { session, loading, updateProfile, updateGmailStatus } = useSessionContext();
+  const { session, loading, updateProfile, refreshSession } = useSessionContext();
+  const { status: gmailStatus, loading: gmailStatusLoading, refresh: refreshGmailStatus } = useGmailStatus();
   const profile: UserProfile | null = session?.profile ?? null;
-  const gmailStatus: GmailStatus | null = session?.gmail ?? null;
-  const gmailLoading = loading || gmailActionPending;
+  const gmailLoading = gmailStatusLoading || gmailActionPending;
   const lastUpdated = profile?.updatedAt ? new Date(profile.updatedAt).toLocaleString() : null;
   const [profileDraft, setProfileDraft] = useState<UserProfile | null>(profile);
   const tabContentRef = useRef<HTMLDivElement | null>(null);
@@ -252,12 +252,13 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
         throw new Error('Failed to delete account');
       }
       updateProfile(null);
-      updateGmailStatus({ connected: false });
       if (typeof window !== 'undefined') {
         localStorage.removeItem('EclipsnOnboarded');
         localStorage.removeItem('EclipsnProfileName');
         localStorage.removeItem('EclipsnProfileNote');
       }
+      await refreshGmailStatus();
+      await refreshSession({ showSpinner: true });
       onClose();
       router.replace('/login');
       setShowDeleteConfirmation(false);
@@ -483,7 +484,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
         <div className="profile-settings-danger-zone">
           <h4>Danger Zone</h4>
           <p className="text-muted">
-            Once you delete your account, there is no going back. All emails, bespoke memories, and chat
+            Once you delete your account, there is no going back. All emails, Index, and
             history will be removed permanently.
           </p>
           {!showDeleteConfirmation ? (

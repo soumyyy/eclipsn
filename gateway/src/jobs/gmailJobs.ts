@@ -1,6 +1,7 @@
 import cron from 'node-cron';
-import { fetchRecentThreads } from '../services/gmailClient';
+import { fetchRecentThreads, GMAIL_JOBS_DISABLED } from '../services/gmailClient';
 import { listUsersWithGmailTokens, removeExpiredGmailThreads } from '../services/db';
+import { areGmailJobsDisabled } from '../services/gmailJobControl';
 
 async function runIncrementalSync(windowMinutes: number) {
   const query = `newer_than:${windowMinutes}m (category:primary OR label:important)`;
@@ -10,6 +11,10 @@ async function runIncrementalSync(windowMinutes: number) {
     return;
   }
   for (const userId of userIds) {
+    if (areGmailJobsDisabled(userId)) {
+      console.log(`[Gmail Sync] Skipping incremental sync for user ${userId} (jobs disabled)`);
+      continue;
+    }
     try {
       const result = await fetchRecentThreads(userId, 200, {
         customQuery: query,
@@ -21,6 +26,10 @@ async function runIncrementalSync(windowMinutes: number) {
         ')'
       );
     } catch (error) {
+      if (error instanceof Error && error.message === GMAIL_JOBS_DISABLED) {
+        console.info(`[Gmail Sync] Incremental sync aborted for user ${userId} (jobs disabled)`);
+        continue;
+      }
       console.error(`[Gmail Sync] Incremental sync failed for user ${userId}`, error);
     }
   }
@@ -33,6 +42,10 @@ async function runCleanup() {
     return;
   }
   for (const userId of userIds) {
+    if (areGmailJobsDisabled(userId)) {
+      console.log('[Gmail Cleanup] Skipping cleanup (jobs disabled) for user', userId);
+      continue;
+    }
     try {
       await removeExpiredGmailThreads(userId);
       console.log('[Gmail Cleanup] Removed expired Gmail threads for user', userId);

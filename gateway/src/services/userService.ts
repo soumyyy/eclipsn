@@ -5,6 +5,7 @@ import {
   deleteUserAccount as deleteUserAccountDb,
   isValidUUID
 } from './db';
+import { disableGmailJobsForUser } from './gmailJobControl';
 import { sessionHelpers } from '../middleware/session';
 
 /**
@@ -63,6 +64,7 @@ export async function attachGmailIdentity(userId: string, gmailEmail: string) {
 
 export async function deleteAccount(userId: string, req: Request, res: Response) {
   try {
+    disableGmailJobsForUser(userId);
     await deleteUserAccountDb(userId);
     sessionHelpers.destroySession(req);
     console.log('[auth] Account deleted:', userId);

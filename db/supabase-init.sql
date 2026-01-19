@@ -22,6 +22,7 @@ create table if not exists user_profiles (
     preferences jsonb,
     biography text,
     custom_data jsonb default '{}'::jsonb,
+    gmail_onboarded boolean not null default false,
     updated_at timestamptz not null default now()
 );
 
@@ -52,6 +53,7 @@ create table if not exists gmail_tokens (
     initial_sync_completed_at timestamptz,
     initial_sync_total_threads integer,
     initial_sync_synced_threads integer,
+    initial_sync_onboarded boolean not null default false,
     access_token_enc jsonb,
     refresh_token_enc jsonb,
     token_key_id text,

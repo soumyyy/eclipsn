@@ -9,13 +9,9 @@ import {
   useState,
   type ReactNode
 } from 'react';
-import {
-  cacheProfileLocally,
-  fetchSessionSnapshot,
-  type GmailStatus,
-  type SessionSnapshot
-} from '@/lib/session';
+import { cacheProfileLocally, fetchSessionSnapshot, type SessionSnapshot } from '@/lib/session';
 import { type UserProfile } from '@/lib/profile';
+import { GmailStatusProvider } from '@/hooks/useGmailStatus';
 
 type RefreshOptions = {
   showSpinner?: boolean;
@@ -26,7 +22,6 @@ type SessionContextValue = {
   loading: boolean;
   refreshSession: (options?: RefreshOptions) => Promise<SessionSnapshot | null>;
   updateProfile: (profile: UserProfile | null) => void;
-  updateGmailStatus: (status: GmailStatus) => void;
 };
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
@@ -77,16 +72,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     cacheProfileLocally(profile);
   }, []);
 
-  const updateGmailStatus = useCallback((status: GmailStatus) => {
-    setSession((prev) => {
-      const profile = prev?.profile ?? null;
-      return {
-        gmail: status,
-        profile
-      };
-    });
-  }, []);
-
   useEffect(() => {
     refreshSession({ showSpinner: true });
   }, [refreshSession]);
@@ -108,13 +93,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       session,
       loading,
       refreshSession,
-      updateProfile,
-      updateGmailStatus
+      updateProfile
     }),
-    [loading, refreshSession, session, updateGmailStatus, updateProfile]
+    [loading, refreshSession, session, updateProfile]
   );
 
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  return (
+    <SessionContext.Provider value={value}>
+      <GmailStatusProvider isAuthenticated={!loading && Boolean(session)}>
+        {children}
+      </GmailStatusProvider>
+    </SessionContext.Provider>
+  );
 }
 
 export function useSessionContext(): SessionContextValue {

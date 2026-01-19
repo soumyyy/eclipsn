@@ -591,6 +591,39 @@ export async function getUserProfile(userId: string) {
   }
 }
 
+export async function getGmailOnboardingStatus(userId: string): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT gmail_onboarded FROM user_profiles WHERE user_id = $1`,
+      [userId]
+    );
+    if (result.rowCount === 0) {
+      return false;
+    }
+    return result.rows[0].gmail_onboarded === true;
+  } finally {
+    client.release();
+  }
+}
+
+export async function setGmailOnboardingStatus(userId: string, onboarded: boolean): Promise<void> {
+  await ensureUserRecord(userId);
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO user_profiles (user_id, gmail_onboarded, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (user_id)
+       DO UPDATE SET gmail_onboarded = EXCLUDED.gmail_onboarded,
+                     updated_at = NOW()`,
+      [userId, onboarded]
+    );
+  } finally {
+    client.release();
+  }
+}
+
 export async function upsertUserProfile(userId: string, data: Record<string, unknown>) {
   const client = await pool.connect();
   try {
