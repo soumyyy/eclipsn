@@ -17,6 +17,8 @@ from ..tools import (
     gmail_semantic_search_tool,
     profile_update_tool,
     gmail_get_thread_tool,
+    search_secondary_emails_tool,
+    gmail_read_attachment_tool,
 )
 from ..services.url_fetch import fetch_url_content
 
@@ -56,6 +58,8 @@ Formatting rules:
 - When referencing outside data, mention the publication/source name in plain text (e.g., "According to Indian Express..."), but leave actual links for the UI to display.
 - Use the gmail_inbox tool whenever the user asks about recent emails, Gmail, inbox activity, or "what's new" in their mail. If gmail_inbox returns no threads, acknowledge that no recent items were found and suggest being more specific instead of simply saying nothing happened.
 - Use gmail_semantic_search when the user asks about a specific topic, sender, or historical email so you can retrieve the closest matches from their Gmail history.
+- If the user asks about the *contents* or *details* of a specific email, you must first find the thread using `gmail_search` (or `gmail_inbox`), and THEN call `gmail_get_thread_tool` with the thread ID to read the full body before answering.
+- If the user explicitly asks about "college", "school", "secondary", or "service account" emails, use `search_secondary_emails` tool. Do NOT use `gmail_inbox` for these unless the user asks for "all my email".
 - When the user shares personal preferences or profile details, call profile_update to store them. Provide JSON with "field" and "value" if it maps to a known field, or "note" for free-form info.
 - Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary."""
 
@@ -118,6 +122,15 @@ def _build_tools(user_id: str) -> List[Tool]:
     async def profile_coro(field: str | None = None, value: str | None = None, note: str | None = None) -> str:
         return await profile_update_tool(field=field, value=value, note=note, user_id=user_id)
 
+    async def secondary_email_coro(q: str) -> str:
+        return await search_secondary_emails_tool(user_id=user_id, query=q)
+
+    async def attachment_coro(q: str) -> str:
+        parts = q.split("|")
+        if len(parts) >= 2:
+            return await gmail_read_attachment_tool(user_id=user_id, message_id=parts[0].strip(), attachment_id=parts[1].strip())
+        return "Invalid arguments. Please provide 'message_id|attachment_id'."
+
     return [
         Tool(
             name="memory_lookup",
@@ -156,6 +169,18 @@ def _build_tools(user_id: str) -> List[Tool]:
             coroutine=profile_coro,
             args_schema=ProfileUpdateInput,
             description="Update the user's profile with a structured argument object containing either field/value or a free-form note."
+        ),
+        Tool(
+            name="search_secondary_emails",
+            func=lambda q: "Secondary email search available only in async mode.",
+            coroutine=secondary_email_coro,
+            description="Search for emails in connected 'Service Accounts' (e.g. College/School email). Use this when the user mentions 'college', 'school', or 'secondary' email."
+        ),
+        Tool(
+            name="gmail_read_attachment",
+            func=lambda q: "Attachment reading available only in async mode.",
+            coroutine=attachment_coro,
+            description="Read the content of a PDF attachment. ONLY use this if 'gmail_thread_detail' showed you an attachment ID that you need to read. Argument format: 'thread_id|attachment_id' OR just the string if you only have one ID."
         ),
     ]
 

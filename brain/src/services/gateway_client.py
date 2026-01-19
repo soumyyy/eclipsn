@@ -77,3 +77,86 @@ async def fetch_gmail_thread_detail(user_id: str, thread_id: str) -> dict | None
     except httpx.HTTPError as exc:
         logger.warning("Failed to load Gmail thread detail: %s", exc)
         return None
+
+
+async def search_service_account_emails(user_id: str, query: str) -> list[dict]:
+    """Search for emails across all connected service accounts."""
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/service-accounts/search"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                url,
+                params={"q": query},
+                headers=_internal_headers(user_id)
+            )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("threads", [])
+    except httpx.HTTPError as exc:
+        logger.warning("Service account search failed: %s", exc)
+        return []
+
+
+async def fetch_calendar_events(user_id: str, time_min: str | None = None, time_max: str | None = None) -> list[dict]:
+    """Fetch calendar events from all connected accounts."""
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/calendar/events"
+    params = {"user_id": user_id}
+    if time_min:
+        params["start"] = time_min
+    if time_max:
+        params["end"] = time_max
+        
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                url,
+                params=params,
+                headers=_internal_headers(user_id)
+            )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("events", [])
+    except httpx.HTTPError as exc:
+        logger.warning("Calendar fetch failed: %s", exc)
+        return []
+
+
+async def fetch_attachment(user_id: str, message_id: str, attachment_id: str) -> bytes | None:
+    """Download attachment content from Gateway."""
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/gmail/messages/{message_id}/attachments/{attachment_id}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                url,
+                headers=_internal_headers(user_id)
+            )
+        response.raise_for_status()
+        return response.content
+    except httpx.HTTPError as exc:
+        logger.warning("Attachment download failed: %s", exc)
+        return None
+
+
+async def fetch_whoop_recovery(user_id: str) -> dict | None:
+    """Fetch user's latest Whoop recovery data."""
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/whoop/recovery"
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                url,
+                headers=_internal_headers(user_id)
+            )
+        if response.status_code == 401:
+            return None # Not connected
+        response.raise_for_status()
+        data = response.json()
+        return data.get("recovery")
+    except httpx.HTTPError as exc:
+        logger.warning("Whoop fetch failed: %s", exc)
+        return None

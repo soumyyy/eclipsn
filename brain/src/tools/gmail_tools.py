@@ -24,6 +24,11 @@ async def gmail_search_tool(user_id: str, query: str, limit: int = 20) -> List[G
 
 
 async def gmail_get_thread_tool(user_id: str, thread_id: str) -> GmailThread:
+    """
+    Fetch the FULL content of a specific email thread. 
+    Use this when the user asks for "details", "contents", or "what does it say" about a specific email found in search results.
+    Do NOT rely on search snippets for answering detailed questions.
+    """
     detail = await fetch_gmail_thread_detail(user_id, thread_id)
     if not detail:
         return GmailThread(id=thread_id, subject="Thread", summary="Thread not found")
@@ -33,7 +38,8 @@ async def gmail_get_thread_tool(user_id: str, thread_id: str) -> GmailThread:
         summary=detail.get('body', detail.get('summary')),
         link=detail.get('link'),
         sender=detail.get('sender'),
-        last_message_at=detail.get('lastMessageAt')
+        last_message_at=detail.get('lastMessageAt'),
+        attachments=detail.get('attachments', [])
     )
 
 
@@ -61,3 +67,41 @@ async def gmail_semantic_search_tool(user_id: str, query: str, limit: int = 5) -
         lines.append(f"- {subject} — {sender} ({date}) {link}")
 
     return "\n".join(lines)
+
+
+async def search_secondary_emails_tool(user_id: str, query: str) -> str:
+    """
+    Search connected Service Accounts (e.g. College Email) for threads.
+    Use this when the user asks about school/college emails or specific secondary accounts.
+    """
+    from ..services.gateway_client import search_service_account_emails
+    
+    threads = await search_service_account_emails(user_id, query)
+    if not threads:
+        return "No emails found in secondary accounts."
+        
+    lines = [f"Found {len(threads)} emails in service accounts:"]
+    for t in threads:
+        lines.append(f"- [{t['accountEmail']}] {t['snippet']} (Link: {t['link']})")
+        
+    return "\n".join(lines)
+
+
+async def gmail_read_attachment_tool(user_id: str, message_id: str, attachment_id: str) -> str:
+    """
+    Read the content of a PDF attachment from a Gmail message.
+    Use this when an email has an attachment (listed in details) that needs to be read.
+    """
+    from ..services.gateway_client import fetch_attachment
+    from .pdf_tools import extract_text_from_bytes
+    
+    content = await fetch_attachment(user_id, message_id, attachment_id)
+    if not content:
+        return "Failed to download attachment."
+        
+    # Assume PDF for now as that's the primary request
+    text = extract_text_from_bytes(content)
+    if not text:
+        return "Could not extract text from the attachment (it might be an image or empty)."
+        
+    return f"--- Attachment Content ---\n{text}"
