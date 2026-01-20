@@ -19,6 +19,8 @@ from ..tools import (
     gmail_get_thread_tool,
     search_secondary_emails_tool,
     gmail_read_attachment_tool,
+    service_account_get_thread_tool,
+    service_account_read_attachment_tool,
 )
 from ..services.url_fetch import fetch_url_content
 
@@ -60,6 +62,8 @@ Formatting rules:
 - Use gmail_semantic_search when the user asks about a specific topic, sender, or historical email so you can retrieve the closest matches from their Gmail history.
 - If the user asks about the *contents* or *details* of a specific email, you must first find the thread using `gmail_search` (or `gmail_inbox`), and THEN call `gmail_get_thread_tool` with the thread ID to read the full body before answering.
 - If the user explicitly asks about "college", "school", "secondary", or "service account" emails, use `search_secondary_emails` tool. Do NOT use `gmail_inbox` for these unless the user asks for "all my email".
+- If `search_secondary_emails` returns results with "(ID: ..., Account: ...)", use `service_account_get_thread` to read the body/attachments using BOTH the Thread ID and Account ID.
+- To read an attachment from a Service Account email, use `service_account_read_attachment`.
 - When the user shares personal preferences or profile details, call profile_update to store them. Provide JSON with "field" and "value" if it maps to a known field, or "note" for free-form info.
 - Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary."""
 
@@ -131,6 +135,43 @@ def _build_tools(user_id: str) -> List[Tool]:
             return await gmail_read_attachment_tool(user_id=user_id, message_id=parts[0].strip(), attachment_id=parts[1].strip())
         return "Invalid arguments. Please provide 'message_id|attachment_id'."
 
+    def is_uuid(s: str) -> bool:
+        return bool(re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', s.lower()))
+
+    async def service_account_thread_coro(q: str) -> str:
+        # Expected: "account_id|thread_id"
+        parts = q.split("|")
+        if len(parts) != 2:
+            return "Invalid arguments. Please provide 'account_id|thread_id'."
+        p0, p1 = parts[0].strip(), parts[1].strip()
+        
+        # Auto-swap if arguments are reversed (Account ID must be UUID)
+        if not is_uuid(p0) and is_uuid(p1):
+            p0, p1 = p1, p0
+            
+        if not is_uuid(p0):
+            return f"Error: The first argument '{p0}' is not a valid Account UUID. Did you forget the Account ID from search results?"
+
+        detail = await service_account_get_thread_tool(user_id, p0, p1)
+        return json.dumps(detail.dict())
+
+    async def service_account_attachment_coro(q: str) -> str:
+        # Expected: "account_id|message_id|attachment_id"
+        parts = q.split("|")
+        if len(parts) < 3:
+            return "Invalid arguments. Please provide 'account_id|message_id|attachment_id'."
+        
+        p0, p1, p2 = parts[0].strip(), parts[1].strip(), parts[2].strip()
+
+        # Check for UUID swap in first two args
+        if not is_uuid(p0) and is_uuid(p1):
+             p0, p1 = p1, p0
+        
+        if not is_uuid(p0):
+             return f"Error: The first argument '{p0}' is not a valid Account UUID."
+
+        return await service_account_read_attachment_tool(user_id, p0, p1, p2)
+
     return [
         Tool(
             name="memory_lookup",
@@ -181,6 +222,18 @@ def _build_tools(user_id: str) -> List[Tool]:
             func=lambda q: "Attachment reading available only in async mode.",
             coroutine=attachment_coro,
             description="Read the content of a PDF attachment. ONLY use this if 'gmail_thread_detail' showed you an attachment ID that you need to read. Argument format: 'thread_id|attachment_id' OR just the string if you only have one ID."
+        ),
+        Tool(
+            name="service_account_get_thread",
+            func=lambda q: "Service Account thread fetch available only in async mode.",
+            coroutine=service_account_thread_coro,
+            description="Fetch full content of a Service Account email. Use ONLY after `search_secondary_emails` gives you 'ID' and 'Account'. Arg format: 'account_id|thread_id'."
+        ),
+        Tool(
+            name="service_account_read_attachment",
+            func=lambda q: "Service Account attachment reading available only in async mode.",
+            coroutine=service_account_attachment_coro,
+            description="Read attachment from a Service Account email. Arg format: 'account_id|message_id|attachment_id'."
         ),
     ]
 

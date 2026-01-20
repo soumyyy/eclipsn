@@ -7,6 +7,8 @@ from .gmail_tools import (
     gmail_semantic_search_tool,
     search_secondary_emails_tool,
     gmail_read_attachment_tool,
+    service_account_get_thread_tool,
+    service_account_read_attachment_tool,
 )
 from .web_search import web_search_tool
 from .profile_tools import profile_update_tool

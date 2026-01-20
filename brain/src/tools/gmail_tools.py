@@ -82,16 +82,19 @@ async def search_secondary_emails_tool(user_id: str, query: str) -> str:
         
     lines = [f"Found {len(threads)} emails in service accounts:"]
     for t in threads:
-        lines.append(f"- [{t['accountEmail']}] {t['snippet']} (Link: {t['link']})")
+        lines.append(f"- [{t.get('accountEmail', 'Unknown Account')}] {t.get('snippet', '')} (ID: {t.get('id')}, Account: {t.get('accountId')})")
         
     return "\n".join(lines)
 
 
 async def gmail_read_attachment_tool(user_id: str, message_id: str, attachment_id: str) -> str:
     """
-    Read the content of a PDF attachment from a Gmail message.
+    Read the content of a PDF attachment from a PRIMARY Gmail message.
     Use this when an email has an attachment (listed in details) that needs to be read.
     """
+    if attachment_id.lower() in ["attachment_id", "attachmentid", "id"]:
+        return "Error: You provided a placeholder ID. You must first call `gmail_get_thread_tool` to get the REAL alphanumeric attachment ID."
+
     from ..services.gateway_client import fetch_attachment
     from .pdf_tools import extract_text_from_bytes
     
@@ -105,3 +108,50 @@ async def gmail_read_attachment_tool(user_id: str, message_id: str, attachment_i
         return "Could not extract text from the attachment (it might be an image or empty)."
         
     return f"--- Attachment Content ---\n{text}"
+
+
+async def service_account_get_thread_tool(user_id: str, account_id: str, thread_id: str) -> GmailThread:
+    """
+    Fetch the FULL content of a specific email thread from a secondary Service Account.
+    Use this when `search_secondary_emails` gives you a thread ID and Account ID.
+    Arguments: account_id, thread_id
+    """
+    from ..services.gateway_client import fetch_service_account_thread
+    
+    detail = await fetch_service_account_thread(user_id, account_id, thread_id)
+    if not detail:
+        return GmailThread(id=thread_id, subject="Thread", summary="Thread not found or Access Denied")
+    
+    return GmailThread(
+        id=thread_id,
+        subject=detail.get('subject', 'Thread'),
+        summary=detail.get('body', detail.get('summary')),
+        link=detail.get('link'),
+        sender=detail.get('sender'),
+        last_message_at=detail.get('lastMessageAt'),
+        attachments=detail.get('attachments', [])
+    )
+
+
+async def service_account_read_attachment_tool(user_id: str, account_id: str, message_id: str, attachment_id: str) -> str:
+    """
+    Read the content of a PDF attachment from a Service Account email.
+    Use this when `service_account_get_thread` shows an attachment.
+    Arguments: account_id, message_id, attachment_id
+    """
+    if attachment_id.lower() in ["attachment_id", "attachmentid", "id"]:
+        return "Error: You provided a placeholder ID. You must first call `service_account_get_thread_tool` to get the REAL alphanumeric attachment ID."
+
+    from ..services.gateway_client import fetch_service_account_attachment
+    from .pdf_tools import extract_text_from_bytes
+    
+    content = await fetch_service_account_attachment(user_id, account_id, message_id, attachment_id)
+    if not content:
+        return "Failed to download attachment from service account."
+        
+    text = extract_text_from_bytes(content)
+    if not text:
+        return "Could not extract text from the attachment."
+        
+    return f"--- Service Account Attachment Content ---\n{text}"
+

@@ -160,3 +160,37 @@ async def fetch_whoop_recovery(user_id: str) -> dict | None:
     except httpx.HTTPError as exc:
         logger.warning("Whoop fetch failed: %s", exc)
         return None
+
+
+async def fetch_service_account_thread(user_id: str, account_id: str, thread_id: str) -> dict | None:
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/service-accounts/{account_id}/threads/{thread_id}"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                url,
+                headers=_internal_headers(user_id)
+            )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPError as exc:
+        logger.warning("Failed to load Service Account thread: %s", exc)
+        return None
+
+
+async def fetch_service_account_attachment(user_id: str, account_id: str, message_id: str, attachment_id: str) -> bytes | None:
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/service-accounts/{account_id}/messages/{message_id}/attachments/{attachment_id}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                url,
+                headers=_internal_headers(user_id)
+            )
+        response.raise_for_status()
+        return response.content
+    except httpx.HTTPError as exc:
+        logger.warning("Service Account Attachment download failed: %s", exc)
+        return None

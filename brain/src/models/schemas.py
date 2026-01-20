@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from pydantic import BaseModel, Field
 
 
@@ -36,6 +36,14 @@ class Task(BaseModel):
     due_date: Optional[str]
 
 
+class GmailAttachment(BaseModel):
+    id: str
+    messageId: str
+    filename: str
+    mimeType: str
+    size: int
+
+
 class GmailThread(BaseModel):
     id: str
     subject: str
@@ -44,3 +52,4 @@ class GmailThread(BaseModel):
     last_message_at: Optional[str] = None
     category: Optional[str] = None
     sender: Optional[str] = None
+    attachments: List[GmailAttachment] = Field(default_factory=list)
