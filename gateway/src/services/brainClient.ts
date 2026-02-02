@@ -33,3 +33,13 @@ export async function triggerMemoryIndexing(userId?: string) {
     }
   }
 }
+
+
+export async function ingestSchedulePdf(params: { userId: string; fileData: string; filename: string }) {
+  // params.fileData is base64 string
+  await axios.post(`${config.brainServiceUrl}/schedule/ingest`, {
+    user_id: params.userId,
+    file_data: params.fileData,
+    filename: params.filename
+  });
+}

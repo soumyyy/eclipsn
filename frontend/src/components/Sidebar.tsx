@@ -24,17 +24,33 @@ export function Sidebar() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [isBespokeMemoryModalOpen, setIsBespokeMemoryModalOpen] = useState(false);
   const [localIdentity, setLocalIdentity] = useState<{ name: string }>({ name: '' });
+  const [initialProfileTab, setInitialProfileTab] = useState<'profile' | 'connections' | undefined>(undefined);
   const connectUrl = getAbsoluteApiUrl('gmail/connect');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const name = localStorage.getItem('EclipsnProfileName') || '';
     setLocalIdentity({ name });
+
+    // Handle Deep Linking
+    const params = new URLSearchParams(window.location.search);
+    const openProfile = params.get('openProfile');
+    if (openProfile === 'connections') {
+      setInitialProfileTab('connections');
+      setIsProfileOpen(true);
+      // Clear param to clean URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('openProfile');
+      window.history.replaceState({}, '', url.toString());
+    }
   }, []);
 
   useEffect(() => {
     if (isProfileOpen) {
       refreshSession();
+    } else {
+      // Reset tab focus on close
+      setInitialProfileTab(undefined);
     }
   }, [isProfileOpen, refreshSession]);
   async function handleGmailAction() {
@@ -130,6 +146,7 @@ export function Sidebar() {
             onOpenBespoke={() => setIsBespokeMemoryModalOpen(true)}
             onClose={() => setIsProfileOpen(false)}
             gmailActionPending={disconnecting}
+            initialTab={initialProfileTab}
           />
         </ModalPortal>
       )}

@@ -10,7 +10,7 @@ const isHttps = process.env.HTTPS === 'true' || process.env.NODE_ENV === 'produc
 // Validate environment configuration
 function validateEnvironment() {
   const errors: string[] = [];
-  
+
   if (isProduction) {
     if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
       errors.push('SESSION_SECRET must be at least 32 characters in production');
@@ -28,7 +28,7 @@ function validateEnvironment() {
       console.warn('⚠️  Redis URL not configured; sessions will be in-memory only');
     }
   }
-  
+
   if (errors.length > 0) {
     throw new Error(`Environment validation failed:\n${errors.join('\n')}`);
   }
@@ -39,10 +39,10 @@ function resolveSameSite(): 'lax' | 'strict' | 'none' {
   if (override === 'strict' || override === 'lax' || override === 'none') {
     return override as 'strict' | 'lax' | 'none';
   }
-  
+
   // Smart defaults based on environment
   if (isProduction && isHttps) {
-    return 'strict'; // Most secure for production
+    return 'lax'; // OAuth redirects require Lax (Strict blocks cookies on redirect)
   }
   return 'lax'; // Compatible with development
 }
@@ -70,20 +70,24 @@ export const config = {
   redisUrl: process.env.UPSTASH_REDIS_URL || process.env.REDIS_URL || '',
   redisToken: process.env.UPSTASH_REDIS_TOKEN || process.env.REDIS_TOKEN || '',
   redisUseTls: (process.env.REDIS_TLS ?? 'true').toLowerCase() !== 'false',
-  
+
   // Database configuration
   databaseUrl: process.env.DATABASE_URL || '',
   databaseSSL: process.env.DATABASE_SSL === 'true',
-  
+
   // Google OAuth configuration
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
-  
+
+  // Whoop OAuth configuration
+  whoopClientId: process.env.WHOOP_CLIENT_ID || '',
+  whoopClientSecret: process.env.WHOOP_CLIENT_SECRET || '',
+
   // Environment flags
   isProduction,
   isHttps,
-  
+
   // Session configuration
   sessionSecret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   sessionMaxAge: resolveSessionMaxAge(),
@@ -93,7 +97,7 @@ export const config = {
   sessionCookieSameSiteOverride: process.env.USER_COOKIE_SAMESITE as 'strict' | 'lax' | 'none' | undefined,
   sessionCookieSecure: process.env.USER_COOKIE_SECURE === 'true' || (isProduction && isHttps),
   sessionStorePrefix: process.env.SESSION_STORE_PREFIX || 'eclipsn:',
-  
+
   gmailTokenEncKey: process.env.GMAIL_TOKEN_ENC_KEY || '',
   gmailTokenKeyId: process.env.GMAIL_TOKEN_KEY_ID || 'v1',
 
@@ -102,7 +106,7 @@ export const config = {
     process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
     ...(process.env.ADDITIONAL_ALLOWED_ORIGINS || '').split(',').filter(Boolean)
   ],
-  
+
   // Security headers
   enableSecurityHeaders: process.env.ENABLE_SECURITY_HEADERS !== 'false'
 };

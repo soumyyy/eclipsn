@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from typing import List, Optional, Dict
+from datetime import datetime
 
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -21,6 +22,13 @@ from ..tools import (
     gmail_read_attachment_tool,
     service_account_get_thread_tool,
     service_account_read_attachment_tool,
+)
+from ..tools.whoop_tools import (
+    get_whoop_recovery_tool,
+    get_whoop_cycle_tool,
+    get_whoop_sleep_tool,
+    get_whoop_workout_tool,
+    get_whoop_body_tool
 )
 from ..services.url_fetch import fetch_url_content
 
@@ -55,7 +63,14 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are Eclipsn, a personal agent for a single user. You know about the user from past conversations and, soon, from their email. Your job is to help summarize information, extract tasks, and keep track of what matters to them. Use memories when helpful, call the web_search tool whenever you need up-to-date facts or entertainment news. If the user references anything that may have changed after 2024 (news, entertainment, finance, product releases, etc.), you MUST call web_search before answering.
 
+Current Context:
+- Current Date & Time: {current_time}
+
 Formatting rules:
+- **Time Grounding**: You are aware of the current date and time.
+    - If the user asks about "today" or "now", use the current date context.
+    - If data (like Whoop recovery) returns a date that is NOT today (e.g., yesterday's data), you MUST explicitly inform the user (e.g., "This is your recovery from yesterday (Jan 19)...").
+    - Do not present stale data as "current" without qualification.
 - Do NOT embed raw URLs or inline citations inside your main response. Rely on the UI to show sources separately.
 - When referencing outside data, mention the publication/source name in plain text (e.g., "According to Indian Express..."), but leave actual links for the UI to display.
 - Use the gmail_inbox tool whenever the user asks about recent emails, Gmail, inbox activity, or "what's new" in their mail. If gmail_inbox returns no threads, acknowledge that no recent items were found and suggest being more specific instead of simply saying nothing happened.
@@ -65,7 +80,12 @@ Formatting rules:
 - If `search_secondary_emails` returns results with "(ID: ..., Account: ...)", use `service_account_get_thread` to read the body/attachments using BOTH the Thread ID and Account ID.
 - To read an attachment from a Service Account email, use `service_account_read_attachment`.
 - When the user shares personal preferences or profile details, call profile_update to store them. Provide JSON with "field" and "value" if it maps to a known field, or "note" for free-form info.
-- Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary."""
+- Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary.
+- **WHOOP / HEALTH**: You have access to detailed Whoop data via `whoop_recovery`, `whoop_sleep`, `whoop_workout`, `whoop_cycle`, and `whoop_body`. If the user mentions health, fitness, energy, or workouts, check the relevant tool(s).
+    - If recovery < 33 (Red): Be a compassionate coach. Suggest rest.
+    - If recovery 34-66 (Yellow): Be encouraging but cautious.
+    - If recovery > 67 (Green): Push them! Tell them they are primed for high strain.
+    - ALWAYS cite metrics (HRV, Sleep %, Strain) to back up your advice."""
 
 
 async def _load_llm():
@@ -235,6 +255,11 @@ def _build_tools(user_id: str) -> List[Tool]:
             coroutine=service_account_attachment_coro,
             description="Read attachment from a Service Account email. Arg format: 'account_id|message_id|attachment_id'."
         ),
+        get_whoop_recovery_tool(user_id),
+        get_whoop_cycle_tool(user_id),
+        get_whoop_sleep_tool(user_id),
+        get_whoop_workout_tool(user_id),
+        get_whoop_body_tool(user_id)
     ]
 
 
@@ -244,6 +269,7 @@ def _format_history(history: Optional[List[dict]], max_items: int = 6) -> str:
     trimmed = history[-max_items:]
     lines = [f"{item.get('role','user')}: {item.get('content','')}" for item in trimmed]
     return "\n".join(lines)
+
 
 URL_PATTERN = re.compile(r"https?://\S+")
 
@@ -296,11 +322,12 @@ async def run_chat_agent(
 
     tools = _build_tools(user_id)
     profile_str = json.dumps(profile, indent=2) if profile else "(no profile info)"
+    current_time_str = datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT + "\n\nUser profile JSON:\n{profile_json}"),
         ("human", "Recent conversation:\n{chat_history}\n\nUser message:\n{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad")
-    ]).partial(profile_json=profile_str)
+    ]).partial(profile_json=profile_str, current_time=current_time_str)
 
     agent = create_openai_functions_agent(llm, tools, prompt)
     executor = AgentExecutor(agent=agent, tools=tools, verbose=False)

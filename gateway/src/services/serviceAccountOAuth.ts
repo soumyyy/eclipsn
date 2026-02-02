@@ -1,0 +1,56 @@
+import axios from 'axios';
+import querystring from 'node:querystring';
+import { config } from '../config';
+
+const SCOPES = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+    // 'https://www.googleapis.com/auth/userinfo.profile' // We just need email to identify
+].join(' ');
+
+// Using the same Google Client ID/Secret as the main app
+// The redirect URI might need to be distinguishing if we want separate flows,
+// but usually we can reuse the callback logic or add state.
+// Here we will use a distinct state param to know it's a SERVICE_ACCOUNT flow.
+
+export function getServiceAccountAuthUrl(state: string) {
+    const params = querystring.stringify({
+        client_id: config.googleClientId,
+        redirect_uri: config.googleRedirectUri, // we reuse the same callback URI
+        response_type: 'code',
+        scope: SCOPES,
+        access_type: 'offline', // Crucial for refresh tokens
+        prompt: 'consent', // Force consent to get refresh token
+        state: `SERVICE_ACCOUNT:${state}` // Prefix to distinguish
+    });
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+export async function exchangeCodeForServiceTokens(code: string) {
+    const body = querystring.stringify({
+        code,
+        client_id: config.googleClientId,
+        client_secret: config.googleClientSecret,
+        redirect_uri: config.googleRedirectUri,
+        grant_type: 'authorization_code'
+    });
+
+    const response = await axios.post(
+        'https://oauth2.googleapis.com/token',
+        body,
+        {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+        }
+    );
+
+    return response.data as {
+        access_token: string;
+        refresh_token: string;
+        expires_in: number;
+        scope: string;
+        token_type: string;
+    };
+}

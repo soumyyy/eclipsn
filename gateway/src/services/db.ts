@@ -5,12 +5,12 @@ import { GraphEdgeType, GraphNodeType, makeEdgeId, makeNodeId, parseNodeId } fro
 import { normalizeProfileNotes } from '../utils/profile';
 import { decryptSecret, encryptSecret, EncryptedSecret } from '../utils/crypto';
 
-const pool = new Pool({
+export const pool = new Pool({
   connectionString: config.databaseUrl,
   ssl: config.databaseSSL
     ? {
-        rejectUnauthorized: false
-      }
+      rejectUnauthorized: false
+    }
     : undefined
 });
 
@@ -1528,3 +1528,486 @@ export async function fetchGraphNeighborhood(params: {
     client.release();
   }
 }
+
+export interface ServiceAccount {
+  id: string;
+  userId: string;
+  email: string;
+  name?: string;
+  provider: string;
+  tokens: {
+    access_token: string;
+    refresh_token: string;
+    expiry_date?: number;
+    [key: string]: any;
+  };
+  filterKeywords: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export async function createServiceAccount(params: {
+  userId: string;
+  email: string;
+  name?: string;
+  tokens: any;
+  filterKeywords?: string[];
+}): Promise<string> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `INSERT INTO service_accounts (user_id, email, tokens, filter_keywords, name)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, email) 
+       DO UPDATE SET 
+         tokens = EXCLUDED.tokens,
+         name = COALESCE(EXCLUDED.name, service_accounts.name),
+         updated_at = NOW()
+       RETURNING id`,
+      [
+        params.userId,
+        params.email,
+        JSON.stringify(params.tokens),
+        JSON.stringify(params.filterKeywords || []),
+        params.name || null
+      ]
+    );
+    return result.rows[0].id as string;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getServiceAccounts(userId: string): Promise<ServiceAccount[]> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT id, user_id, email, name, provider, tokens, filter_keywords, created_at, updated_at
+       FROM service_accounts
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      email: row.email,
+      name: row.name,
+      provider: row.provider,
+      tokens: row.tokens,
+      filterKeywords: row.filter_keywords,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export async function getServiceAccountById(accountId: string): Promise<ServiceAccount | null> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT id, user_id, email, name, provider, tokens, filter_keywords, created_at, updated_at
+       FROM service_accounts
+       WHERE id = $1`,
+      [accountId]
+    );
+    if (result.rowCount === 0) return null;
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      userId: row.user_id,
+      email: row.email,
+      name: row.name,
+      provider: row.provider,
+      tokens: row.tokens,
+      filterKeywords: row.filter_keywords,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateServiceAccountTokens(accountId: string, tokens: any) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `UPDATE service_accounts
+       SET tokens = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [accountId, JSON.stringify(tokens)]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteServiceAccount(accountId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query(`DELETE FROM service_accounts WHERE id = $1`, [accountId]);
+  } finally {
+    client.release();
+  }
+}
+
+export async function createServiceAccountJob(accountId: string): Promise<string> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `INSERT INTO service_account_jobs (account_id, status, progress, logs, message)
+       VALUES ($1, 'pending', 0, '{}', 'Job started')
+       RETURNING id`,
+      [accountId]
+    );
+    return result.rows[0].id as string;
+  } finally {
+    client.release();
+  }
+}
+
+export async function updateServiceAccountJob(params: {
+  jobId: string;
+  status?: string;
+  progress?: number;
+  message?: string;
+  log?: string;
+}) {
+  const client = await pool.connect();
+  try {
+    const updates: string[] = [];
+    const values: any[] = [params.jobId];
+    let idx = 2;
+
+    if (params.status) {
+      updates.push(`status = $${idx++}`);
+      values.push(params.status);
+    }
+    if (params.progress !== undefined) {
+      updates.push(`progress = $${idx++}`);
+      values.push(params.progress);
+    }
+    if (params.message) {
+      updates.push(`message = $${idx++}`);
+      values.push(params.message);
+    }
+    if (params.log) {
+      updates.push(`logs = array_append(logs, $${idx++})`);
+      values.push(params.log);
+    }
+
+    updates.push(`updated_at = NOW()`);
+
+    if (updates.length === 1) return; // Only updated_at
+
+    await client.query(
+      `UPDATE service_account_jobs SET ${updates.join(', ')} WHERE id = $1`,
+      values
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export interface ServiceAccountJob {
+  id: string;
+  accountId: string;
+  status: string;
+  progress: number;
+  logs: string[];
+  message: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export async function getServiceAccountJob(jobId: string): Promise<ServiceAccountJob | null> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT id, account_id, status, progress, logs, message, created_at, updated_at
+       FROM service_account_jobs
+       WHERE id = $1`,
+      [jobId]
+    );
+    if (result.rowCount === 0) return null;
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      accountId: row.account_id,
+      status: row.status,
+      progress: row.progress,
+      logs: row.logs || [],
+      message: row.message,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function saveUserIntegration(params: {
+  userId: string;
+  provider: string;
+  accessToken: string;
+  refreshToken: string;
+  expiry: Date | null;
+  metadata?: any;
+}) {
+  await ensureUserRecord(params.userId);
+  const encryptedAccess = encryptSecret(params.accessToken);
+  const encryptedRefresh = encryptSecret(params.refreshToken);
+
+  const client = await pool.connect();
+  try {
+    const query = `
+      INSERT INTO user_integrations (id, user_id, provider, access_token_enc, refresh_token_enc, expires_at, metadata, updated_at)
+      VALUES (gen_random_uuid(), $1, $2, $3::jsonb, $4::jsonb, $5, $6::jsonb, NOW())
+      ON CONFLICT (user_id, provider)
+      DO UPDATE SET access_token_enc = EXCLUDED.access_token_enc,
+                    refresh_token_enc = EXCLUDED.refresh_token_enc,
+                    expires_at = EXCLUDED.expires_at,
+                    metadata = COALESCE(user_integrations.metadata, '{}'::jsonb) || EXCLUDED.metadata,
+                    updated_at = NOW()
+    `;
+    await client.query(query, [
+      params.userId,
+      params.provider,
+      JSON.stringify(encryptedAccess),
+      JSON.stringify(encryptedRefresh),
+      params.expiry,
+      JSON.stringify(params.metadata || {})
+    ]);
+  } finally {
+    client.release();
+  }
+}
+
+export async function getUserIntegration(userId: string, provider: string) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT access_token_enc, refresh_token_enc, expires_at, metadata
+       FROM user_integrations
+       WHERE user_id = $1 AND provider = $2`,
+      [userId, provider]
+    );
+
+    if (result.rowCount === 0) return null;
+
+    const row = result.rows[0];
+    let accessTokenEnc = row.access_token_enc;
+    if (typeof accessTokenEnc === 'string') {
+      try { accessTokenEnc = JSON.parse(accessTokenEnc); } catch (e) { }
+    }
+
+    let refreshTokenEnc = row.refresh_token_enc;
+    if (typeof refreshTokenEnc === 'string') {
+      try { refreshTokenEnc = JSON.parse(refreshTokenEnc); } catch (e) { }
+    }
+
+    const accessToken = decryptSecret(accessTokenEnc);
+    const refreshToken = decryptSecret(refreshTokenEnc);
+
+    return {
+      accessToken,
+      refreshToken,
+      expiresAt: row.expires_at as Date | null,
+      metadata: row.metadata
+    };
+  } catch (error) {
+    console.error(`Failed to get integration tokens for provider ${provider}`, error);
+    return null;
+  } finally {
+    client.release();
+  }
+}
+
+// Whoop Persistence Helpers
+
+export async function saveWhoopCycle(userId: string, data: any) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO whoop_cycles (user_id, whoop_id, start_time, end_time, score_state, strain, kilojoules, average_heart_rate, max_heart_rate, raw_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (whoop_id) DO UPDATE SET
+         end_time = EXCLUDED.end_time,
+         score_state = EXCLUDED.score_state,
+         strain = EXCLUDED.strain,
+         kilojoules = EXCLUDED.kilojoules,
+         average_heart_rate = EXCLUDED.average_heart_rate,
+         max_heart_rate = EXCLUDED.max_heart_rate,
+         raw_data = EXCLUDED.raw_data,
+         updated_at = NOW()`,
+      [
+        userId,
+        data.id,
+        data.start,
+        data.end || null,
+        data.score_state,
+        data.score?.strain,
+        data.score?.kilojoule,
+        data.score?.average_heart_rate,
+        data.score?.max_heart_rate,
+        JSON.stringify(data)
+      ]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function saveWhoopRecovery(userId: string, data: any) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO whoop_recoveries (user_id, cycle_id, whoop_id, score, rhr, hrv_rmssd_milli, spo2_percentage, skin_temp_celsius, sleep_state, score_state, timestamp, raw_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ON CONFLICT (whoop_id) DO UPDATE SET
+         score = EXCLUDED.score,
+         rhr = EXCLUDED.rhr,
+         hrv_rmssd_milli = EXCLUDED.hrv_rmssd_milli,
+         spo2_percentage = EXCLUDED.spo2_percentage,
+         skin_temp_celsius = EXCLUDED.skin_temp_celsius,
+         sleep_state = EXCLUDED.sleep_state,
+         score_state = EXCLUDED.score_state,
+         raw_data = EXCLUDED.raw_data`,
+      [
+        userId,
+        data.cycle_id,
+        data.id || (data.cycle_id ? data.cycle_id * 10 : undefined),
+        data.score?.recovery_score,
+        data.score?.resting_heart_rate,
+        data.score?.hrv_rmssd_milli,
+        data.score?.spo2_percentage,
+        data.score?.skin_temp_celsius,
+        data.sleep_state,
+        data.score_state,
+        data.timestamp,
+        JSON.stringify(data)
+      ]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function saveWhoopSleep(userId: string, data: any) {
+  const client = await pool.connect();
+  try {
+    const s = data.score;
+    await client.query(
+      `INSERT INTO whoop_sleeps (user_id, whoop_id, cycle_id, start_time, end_time, score_state, performance_percentage, consistency_percentage, efficiency_percentage, time_in_bed_milli, light_sleep_milli, slow_wave_sleep_milli, rem_sleep_milli, awake_milli, sleep_need_milli, respiratory_rate, sleep_debt_milli, wake_count, raw_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+       ON CONFLICT (whoop_id) DO UPDATE SET
+         end_time = EXCLUDED.end_time,
+         score_state = EXCLUDED.score_state,
+         performance_percentage = EXCLUDED.performance_percentage,
+         efficiency_percentage = EXCLUDED.efficiency_percentage,
+         light_sleep_milli = EXCLUDED.light_sleep_milli,
+         slow_wave_sleep_milli = EXCLUDED.slow_wave_sleep_milli,
+         rem_sleep_milli = EXCLUDED.rem_sleep_milli,
+         awake_milli = EXCLUDED.awake_milli,
+         respiratory_rate = EXCLUDED.respiratory_rate,
+         raw_data = EXCLUDED.raw_data`,
+      [
+        userId,
+        data.id,
+        data.cycle_id,
+        data.start,
+        data.end,
+        data.score_state,
+        s?.stage_summary?.total_in_bed_time_milli ? (data.score?.sleep_performance_percentage) : null,
+        s?.sleep_consistency_percentage,
+        s?.sleep_efficiency_percentage,
+        s?.stage_summary?.total_in_bed_time_milli,
+        s?.stage_summary?.light_sleep_milli,
+        s?.stage_summary?.slow_wave_sleep_milli,
+        s?.stage_summary?.rem_sleep_milli,
+        s?.stage_summary?.awake_milli,
+        s?.sleep_needed?.baseline_milli,
+        s?.respiratory_rate,
+        s?.sleep_needed?.debt_milli,
+        s?.stage_summary?.wake_count || 0,
+        JSON.stringify(data)
+      ]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function saveWhoopWorkout(userId: string, data: any) {
+  const client = await pool.connect();
+  try {
+    const s = data.score;
+    await client.query(
+      `INSERT INTO whoop_workouts (user_id, whoop_id, cycle_id, sport_id, start_time, end_time, score_state, strain, average_heart_rate, max_heart_rate, kilojoules, distance_meter, altitude_gain_meter, altitude_change_meter, zone_durations, raw_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       ON CONFLICT (whoop_id) DO UPDATE SET
+         end_time = EXCLUDED.end_time,
+         score_state = EXCLUDED.score_state,
+         strain = EXCLUDED.strain,
+         average_heart_rate = EXCLUDED.average_heart_rate,
+         max_heart_rate = EXCLUDED.max_heart_rate,
+         kilojoules = EXCLUDED.kilojoules,
+         raw_data = EXCLUDED.raw_data`,
+      [
+        userId,
+        data.id,
+        data.cycle_id,
+        data.sport_id,
+        data.start,
+        data.end,
+        data.score_state,
+        s?.strain,
+        s?.average_heart_rate,
+        s?.max_heart_rate,
+        s?.kilojoule,
+        s?.distance_meter,
+        s?.altitude_gain_meter,
+        s?.altitude_change_meter,
+        JSON.stringify(s?.zone_duration || {}),
+        JSON.stringify(data)
+      ]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function saveWhoopMeasurement(userId: string, data: any) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO whoop_measurements (user_id, height_meter, weight_kg, max_heart_rate, raw_data)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        userId,
+        data.height_meter,
+        data.weight_kg,
+        data.max_heart_rate,
+        JSON.stringify(data)
+      ]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function listUsersWithWhoopIntegration(): Promise<string[]> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT DISTINCT user_id FROM user_integrations WHERE provider = 'whoop'`
+    );
+    return result.rows.map(r => r.user_id);
+  } finally {
+    client.release();
+  }
+}
+

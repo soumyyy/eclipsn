@@ -11,7 +11,7 @@ import {
   getUserProfile,
   markInitialGmailSync
 } from '../services/db';
-import { fetchRecentThreads, getGmailProfile, NO_GMAIL_TOKENS, fetchThreadBody } from '../services/gmailClient';
+import { fetchRecentThreads, getGmailProfile, NO_GMAIL_TOKENS, fetchThreadBody, getGmailAttachment } from '../services/gmailClient';
 import { embedEmailText } from '../services/embeddings';
 import { getUserId, requireUserId } from '../utils/request';
 import { ensureInitialGmailSync, formatGmailDate } from '../jobs/gmailInitialSync';
@@ -32,7 +32,7 @@ router.get('/connect', (req, res) => {
   try {
     const state = req.query.state?.toString() || 'Eclipsn-dev';
     const authUrl = getAuthUrl(state);
-    
+
     console.log('[Gmail OAuth] Redirecting to:', authUrl);
     return res.redirect(authUrl);
   } catch (error) {
@@ -43,13 +43,21 @@ router.get('/connect', (req, res) => {
 
 router.get('/callback', async (req, res) => {
   const { code, error: oauthError, error_description } = req.query;
-  
+
   // Handle OAuth errors
   if (oauthError) {
     console.error('[Gmail OAuth] OAuth error:', oauthError, error_description);
     return res.redirect(`${config.frontendOrigin}/login?error=${encodeURIComponent(String(oauthError))}`);
   }
-  
+
+  // Intercept Service Account Flow
+  const state = req.query.state as string;
+  if (state && state.startsWith('SERVICE_ACCOUNT:')) {
+    console.log('[Gmail OAuth] Detected Service Account flow, redirecting to dedicated handler');
+    const params = new URLSearchParams(req.query as any);
+    return res.redirect(`/api/service-accounts/callback?${params.toString()}`);
+  }
+
   if (!code || typeof code !== 'string') {
     console.error('[Gmail OAuth] Missing authorization code');
     return res.status(400).send('Missing authorization code parameter');
@@ -84,10 +92,10 @@ router.get('/callback', async (req, res) => {
     }
 
     let userId: string | null = null;
-    
+
     // Check for existing session using centralized session management
     const existingUserId = await ensureSessionUser(req, res);
-    
+
     if (existingUserId) {
       // User has existing session - attach Gmail to existing account
       userId = existingUserId;
@@ -124,11 +132,11 @@ router.get('/callback', async (req, res) => {
     });
 
     console.log('[Gmail OAuth] Successfully connected Gmail for user:', userId);
-    
+
     // Check if user needs onboarding or can go directly to main app
     try {
       const profile = await getUserProfile(userId);
-      
+
       if (profile && (profile as any).fullName) {
         // User has profile → redirect to main app
         console.log('[Gmail OAuth] User has profile, redirecting to main app');
@@ -143,17 +151,17 @@ router.get('/callback', async (req, res) => {
       // Fallback to onboarding if we can't determine profile status
       return res.redirect(`${config.frontendOrigin}/login?stage=onboarding`);
     }
-    
+
   } catch (error) {
     console.error('[Gmail OAuth] Callback error:', error);
-    
+
     // Clear any partial session state
     try {
       await ensureSessionUser(req, res); // This will clear invalid sessions
     } catch {
       // Ignore cleanup errors
     }
-    
+
     // Redirect back to login page on error
     return res.redirect(`${config.frontendOrigin}/login?error=oauth_failed`);
   }
@@ -264,9 +272,9 @@ router.post('/disconnect', async (req, res) => {
   const userId = requireUserId(req);
   try {
     console.log('[Gmail Disconnect] Disconnecting Gmail for user:', userId);
-    
+
     const tokens = await getGmailTokens(userId);
-    
+
     // Revoke tokens with Google
     if (tokens?.accessToken) {
       try {
@@ -284,7 +292,7 @@ router.post('/disconnect', async (req, res) => {
         console.warn('[Gmail Disconnect] Failed to revoke refresh token:', revokeError);
       }
     }
-    
+
     // Delete tokens from database
     await deleteGmailTokens(userId);
     await markInitialGmailSync(userId, {
@@ -294,14 +302,14 @@ router.post('/disconnect', async (req, res) => {
       syncedThreads: 0
     });
     void emitGmailStatusUpdate(userId);
-    
+
     console.log('[Gmail Disconnect] Gmail successfully disconnected for user:', userId);
     return res.json({ status: 'disconnected', timestamp: new Date().toISOString() });
   } catch (error) {
     console.error('[Gmail Disconnect] Failed to disconnect Gmail:', error);
-    return res.status(500).json({ 
-      error: 'Failed to disconnect Gmail', 
-      timestamp: new Date().toISOString() 
+    return res.status(500).json({
+      error: 'Failed to disconnect Gmail',
+      timestamp: new Date().toISOString()
     });
   }
 });
@@ -405,5 +413,30 @@ router.get('/threads/:threadId', async (req, res) => {
     }
     console.error('Failed to fetch Gmail thread body', error);
     return res.status(500).json({ error: 'Failed to fetch Gmail thread' });
+  }
+});
+
+router.get('/messages/:messageId/attachments/:attachmentId', async (req, res) => {
+  const { messageId, attachmentId } = req.params;
+  const userId = requireUserId(req);
+
+  try {
+    const attachment = await getGmailAttachment(userId, messageId, attachmentId);
+
+    if (!attachment || !attachment.data) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+
+    const fileData = Buffer.from(attachment.data, 'base64');
+
+    res.setHeader('Content-Type', 'application/pdf'); // Default to PDF or octet-stream
+    res.setHeader('Content-Length', fileData.length);
+    res.send(fileData);
+  } catch (error) {
+    if (error instanceof Error && error.message === NO_GMAIL_TOKENS) {
+      return res.status(401).json({ error: 'Gmail not connected' });
+    }
+    console.error('Failed to download attachment', error);
+    return res.status(500).json({ error: 'Failed to download attachment' });
   }
 });

@@ -204,7 +204,7 @@ main() {
     
     # Start Brain (FastAPI on port 8000)
     start_service "BRAIN" "$MAGENTA" "${PROJECT_ROOT}/brain" \
-        poetry run uvicorn src.main:app --reload --port 8000
+        poetry run uvicorn src.main:app --reload --reload-dir src --port 8000
     
     sleep 2
     

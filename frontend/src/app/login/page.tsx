@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState, Suspense } from 'react';
 import { GoogleSignInButton } from '@/components/login/GoogleSignInButton';
 import { OnboardingPrompt, type OnboardingQuestion } from '@/components/login/OnboardingPrompt';
 import { VideoBackground } from '@/components/login/VideoBackground';
@@ -26,15 +26,17 @@ const QUESTIONS: OnboardingQuestion[] = [
 
 type Stage = 'signin' | 'onboarding' | 'success';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { session, loading: sessionLoading, refreshSession } = useSessionContext();
   const { status: gmailStatus } = useGmailStatus();
+
   const [stage, setStage] = useState<Stage>(() => {
     const stageParam = searchParams.get('stage');
     return stageParam === 'onboarding' ? 'onboarding' : 'signin';
   });
+
   const [authLoading, setAuthLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
@@ -58,7 +60,7 @@ export default function LoginPage() {
 
   const handleGoogleSignIn = useCallback(() => {
     if (typeof window === 'undefined') return;
-    
+
     // Simple linear flow: redirect current window to OAuth
     setAuthLoading(true);
     window.location.href = `${getAbsoluteApiUrl('gmail/connect')}?state=Eclipsn`;
@@ -175,5 +177,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="login-page"><div className="login-content"><p>Loading...</p></div></div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

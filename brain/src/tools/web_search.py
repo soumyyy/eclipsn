@@ -30,6 +30,11 @@ async def web_search_tool(query: str, max_results: int = 4) -> Tuple[str, List[S
         title = item.get("title", "Untitled")
         url = item.get("url", "")
         snippet = item.get("content", "").strip()
+        
+        # Filter out self-referential Tavily sources
+        if "tavily ai" in title.lower() and "ai search" in title.lower():
+            continue
+            
         source = SearchSource(title=title, url=url, snippet=snippet)
         sources.append(source)
         summary_lines.append(f"{title} — {snippet}")

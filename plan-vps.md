@@ -210,8 +210,8 @@ This guide outlines how to containerize Eclipsn’s services and run them on a s
 If you prefer building images locally and pushing to a registry:
 
 ```bash
-docker build -t ghcr.io/you/Eclipsn-frontend:latest frontend
-docker push ghcr.io/you/Eclipsn-frontend:latest
+docker build -t ghcr.io/you/Eclipsn:latest frontend
+docker push ghcr.io/you/Eclipsn:latest
 # repeat for gateway/brain
 ```
 

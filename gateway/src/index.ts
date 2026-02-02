@@ -6,6 +6,9 @@ import gmailRouter from './routes/gmail';
 import profileRouter from './routes/profile';
 import memoryRouter from './routes/memory';
 import graphRouter from './routes/graph';
+import feedRouter from './routes/feed';
+import whoopRouter from './routes/whoop';
+import calendarRouter from './routes/calendar';
 import internalProfileRouter from './routes/internal/profile';
 import { scheduleGmailJobs } from './jobs/gmailJobs';
 import { attachUserContext } from './middleware/userContext';
@@ -36,7 +39,7 @@ app.use(rateLimiter);
 app.use(sessionConfig);
 
 // 4. CORS
-app.use(cors({ 
+app.use(cors({
   origin: config.allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
@@ -50,8 +53,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
  * HEALTH CHECKS
  */
 app.get('/health', (_req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     environment: config.isProduction ? 'production' : 'development'
   });
@@ -71,10 +74,18 @@ app.use(attachUserContext);
 app.use('/api/chat', chatRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/memory', memoryRouter);
-app.use('/api/graph', graphRouter);
+app.use('/api/memory', memoryRouter);
+// app.use('/api/graph', graphRouter); // Disabled per user request
+app.use('/api/feed', feedRouter);
+app.use('/api/feed', feedRouter);
+app.use('/api/whoop', whoopRouter);
+app.use('/api/calendar', calendarRouter);
 
 // Gmail with auth rate limiting
 app.use('/api/gmail', authRateLimiter, gmailRouter);
+
+import serviceAccountRouter from './routes/serviceAccounts';
+app.use('/api/service-accounts', rateLimiter, serviceAccountRouter);
 
 /**
  * ERROR HANDLING
@@ -82,11 +93,11 @@ app.use('/api/gmail', authRateLimiter, gmailRouter);
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const status = err?.status || 500;
   const message = err?.message || 'Internal server error';
-  
+
   if (status >= 500) {
     console.error('[Error]', err);
   }
-  
+
   res.status(status).json({ error: message });
 });
 
@@ -97,7 +108,7 @@ const server = app.listen(config.port, () => {
   console.log(`🚀 Eclipsn Gateway on port ${config.port}`);
   console.log(`📦 Security: Helmet.js + express-rate-limit + express-session`);
   console.log(`🌍 Environment: ${config.isProduction ? 'production' : 'development'}`);
-  
+
   scheduleGmailJobs();
   console.log('✅ Startup complete');
 });

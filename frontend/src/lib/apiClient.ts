@@ -16,3 +16,27 @@ export async function post(path: string, body: unknown) {
 
   return response.json();
 }
+
+export async function get(path: string) {
+  const response = await gatewayFetch(path, {
+    method: 'GET'
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gateway error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function del(path: string) {
+  const response = await gatewayFetch(path, {
+    method: 'DELETE'
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gateway error: ${response.status}`);
+  }
+
+  return response.json();
+}

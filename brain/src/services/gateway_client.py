@@ -194,3 +194,68 @@ async def fetch_service_account_attachment(user_id: str, account_id: str, messag
     except httpx.HTTPError as exc:
         logger.warning("Service Account Attachment download failed: %s", exc)
         return None
+
+async def fetch_whoop_cycle(user_id: str) -> dict | None:
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/whoop/cycles"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=_internal_headers(user_id))
+        if response.status_code == 401: return None
+        response.raise_for_status()
+        return response.json().get("cycle")
+    except httpx.HTTPError as exc:
+        logger.warning("Whoop cycle fetch failed: %s", exc)
+        return None
+
+async def fetch_whoop_sleep(user_id: str) -> dict | None:
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/whoop/sleep"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=_internal_headers(user_id))
+        if response.status_code == 401: return None
+        response.raise_for_status()
+        return response.json().get("sleep")
+    except httpx.HTTPError as exc:
+        logger.warning("Whoop sleep fetch failed: %s", exc)
+        return None
+
+async def fetch_whoop_workout(user_id: str) -> dict | None:
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/whoop/workout"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=_internal_headers(user_id))
+        if response.status_code == 401: return None
+        response.raise_for_status()
+        return response.json().get("workout")
+    except httpx.HTTPError as exc:
+        logger.warning("Whoop workout fetch failed: %s", exc)
+        return None
+
+async def fetch_whoop_profile(user_id: str) -> dict | None:
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/whoop/profile"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=_internal_headers(user_id))
+        if response.status_code == 401: return None
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPError as exc:
+        logger.warning("Whoop profile fetch failed: %s", exc)
+        return None
+
+async def fetch_whoop_measurements(user_id: str) -> dict | None:
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/whoop/measurements"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=_internal_headers(user_id))
+        if response.status_code == 401: return None
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPError as exc:
+        logger.warning("Whoop measurements fetch failed: %s", exc)
+        return None

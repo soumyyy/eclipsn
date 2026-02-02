@@ -287,6 +287,16 @@ export async function fetchThreadBody(userId: string, gmailThreadId: string) {
     });
     const messages = response.data.messages || [];
     let bodyText = '';
+    const attachments: Array<{ id: string; messageId: string; filename: string; mimeType: string; size: number }> = [];
+
+    // Process messages (chronological for attachments, reverse for body text priority if needed)
+    for (const message of messages) {
+      if (message.payload && message.id) {
+        const msgAttachments = extractAttachments(message.payload, message.id);
+        attachments.push(...msgAttachments);
+      }
+    }
+
     for (const message of messages.reverse()) {
       const text = extractPlainText(message.payload);
       if (text) {
@@ -294,7 +304,10 @@ export async function fetchThreadBody(userId: string, gmailThreadId: string) {
       }
     }
     bodyText = bodyText.trim() || metadata.summary || '';
+
+    // We don't upsert body here if we want to keep it simple, or we proceed usually.
     await upsertGmailThreadBody({ userId, threadRowId: metadata.id, body: bodyText });
+
     return {
       gmailThreadId: metadata.gmailThreadId,
       subject: metadata.subject,
@@ -302,8 +315,46 @@ export async function fetchThreadBody(userId: string, gmailThreadId: string) {
       sender: metadata.sender,
       lastMessageAt: metadata.lastMessageAt,
       body: bodyText,
-      link: `https://mail.google.com/mail/u/0/#inbox/${metadata.gmailThreadId}`
+      link: `https://mail.google.com/mail/u/0/#inbox/${metadata.gmailThreadId}`,
+      attachments
     };
+  } catch (error) {
+    await handleGmailAuthError(userId, error);
+    throw error;
+  }
+}
+
+function extractAttachments(payload: any, messageId: string): Array<{ id: string; messageId: string; filename: string; mimeType: string; size: number }> {
+  const attachments: Array<{ id: string; messageId: string; filename: string; mimeType: string; size: number }> = [];
+
+  if (payload.body?.attachmentId) {
+    attachments.push({
+      id: payload.body.attachmentId,
+      messageId: messageId,
+      filename: payload.filename || 'unknown',
+      mimeType: payload.mimeType || 'application/octet-stream',
+      size: payload.body.size || 0
+    });
+  }
+
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      attachments.push(...extractAttachments(part, messageId));
+    }
+  }
+
+  return attachments;
+}
+
+export async function getGmailAttachment(userId: string, messageId: string, attachmentId: string) {
+  try {
+    const gmail = await getAuthorizedGmail(userId);
+    const response = await gmail.users.messages.attachments.get({
+      userId: 'me',
+      messageId,
+      id: attachmentId
+    });
+    return response.data;
   } catch (error) {
     await handleGmailAuthError(userId, error);
     throw error;

@@ -11,12 +11,17 @@ import {
 } from '@/lib/profile';
 import { useGmailStatus } from '@/hooks/useGmailStatus';
 import { gatewayFetch } from '@/lib/gatewayFetch';
+import { getAbsoluteApiUrl } from '@/lib/api';
+import { useWhoopStatus } from '@/hooks/useWhoopStatus';
+import { ServiceAccountsSettings } from './ServiceAccountsSettings';
+
 
 interface ProfileModalProps {
   onGmailAction: () => void;
   onOpenBespoke: () => void;
   onClose: () => void;
   gmailActionPending: boolean;
+  initialTab?: TabId;
 }
 
 const tabsOrder = ['profile', 'notes', 'connections', 'history', 'settings'] as const;
@@ -30,9 +35,16 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'settings', label: 'Settings' }
 ];
 
-export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActionPending }: ProfileModalProps) {
+export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActionPending, initialTab }: ProfileModalProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabId>('profile');
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab || 'profile');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
   const [activeNoteIndex, setActiveNoteIndex] = useState<number | null>(null);
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [draftNoteText, setDraftNoteText] = useState('');
@@ -48,12 +60,18 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   const deleteInputMatches = deleteConfirmationText.trim().toLowerCase() === deletePhrase;
   const { session, loading, updateProfile, refreshSession } = useSessionContext();
   const { status: gmailStatus, loading: gmailStatusLoading, refresh: refreshGmailStatus } = useGmailStatus();
+  const { status: whoopStatus, loading: whoopLoading, disconnect: disconnectWhoop } = useWhoopStatus();
   const profile: UserProfile | null = session?.profile ?? null;
   const gmailLoading = gmailStatusLoading || gmailActionPending;
   const lastUpdated = profile?.updatedAt ? new Date(profile.updatedAt).toLocaleString() : null;
   const [profileDraft, setProfileDraft] = useState<UserProfile | null>(profile);
   const tabContentRef = useRef<HTMLDivElement | null>(null);
   const scrollMomentumRef = useRef(0);
+
+  // Set connections sub-tab to 'services' if user lands on connections via redirect
+  const [connectionsTab, setConnectionsTab] = useState<'apps' | 'services'>(
+    initialTab === 'connections' ? 'services' : 'apps'
+  );
 
   useEffect(() => {
     if (!isEditingProfile) {
@@ -87,33 +105,33 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
     title: string;
     fields: Array<{ key: EditableFieldKey; label: string; placeholder?: string; type?: 'textarea' }>;
   }> = [
-    {
-      title: 'Identity',
-      fields: [
-        { key: 'fullName', label: 'Full name', placeholder: 'Jane Doe' },
-        { key: 'preferredName', label: 'Preferred name', placeholder: 'Callsign' }
-      ]
-    },
-    {
-      title: 'Contact',
-      fields: [
-        { key: 'contactEmail', label: 'Contact email', placeholder: 'you@example.com' },
-        { key: 'phone', label: 'Phone', placeholder: '+1 555 0100' },
-        { key: 'timezone', label: 'Timezone', placeholder: 'America/Los_Angeles' }
-      ]
-    },
-    {
-      title: 'Work',
-      fields: [
-        { key: 'company', label: 'Company', placeholder: 'Company' },
-        { key: 'role', label: 'Role', placeholder: 'Founder, Operator' }
-      ]
-    },
-    {
-      title: 'Biography',
-      fields: [{ key: 'biography', label: 'Bio', placeholder: 'Tell Eclipsn about your focus', type: 'textarea' }]
-    }
-  ];
+      {
+        title: 'Identity',
+        fields: [
+          { key: 'fullName', label: 'Full name', placeholder: 'Jane Doe' },
+          { key: 'preferredName', label: 'Preferred name', placeholder: 'Callsign' }
+        ]
+      },
+      {
+        title: 'Contact',
+        fields: [
+          { key: 'contactEmail', label: 'Contact email', placeholder: 'you@example.com' },
+          { key: 'phone', label: 'Phone', placeholder: '+1 555 0100' },
+          { key: 'timezone', label: 'Timezone', placeholder: 'America/Los_Angeles' }
+        ]
+      },
+      {
+        title: 'Work',
+        fields: [
+          { key: 'company', label: 'Company', placeholder: 'Company' },
+          { key: 'role', label: 'Role', placeholder: 'Founder, Operator' }
+        ]
+      },
+      {
+        title: 'Biography',
+        fields: [{ key: 'biography', label: 'Bio', placeholder: 'Tell Eclipsn about your focus', type: 'textarea' }]
+      }
+    ];
 
   const editableKeys: EditableFieldKey[] = [
     'fullName',
@@ -413,41 +431,97 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   };
 
   const renderConnectionsContent = () => {
-    const cards = [
-      {
-        title: 'Gmail',
-        description: gmailStatus?.connected
-          ? `Signed in as ${gmailStatus.name ?? gmailStatus.email ?? 'operator'}.`
-          : 'Connect Gmail to ingest threads and summaries.',
-        action: gmailStatus?.connected ? 'Logout' : 'Connect',
-        onClick: onGmailAction,
-        loading: gmailLoading
-      },
-      {
-        title: 'Bespoke memory',
-        description: 'Upload markdown notes and files.',
-        action: 'Open',
-        onClick: onOpenBespoke,
-        loading: false
-      }
-    ];
     return (
-      <div className="connection-list">
-        {cards.map((card) => (
-          <div className="connection-item" key={card.title}>
-            <div className="connection-meta">
-              <div>
-                <p className="connection-name">{card.title}</p>
-                <p className="connection-desc">{card.description}</p>
+      <div className="flex flex-col h-full min-h-[400px]">
+        {/* Sub-tabs Toggle */}
+        <div className="flex p-1 bg-primary/5 rounded-lg border border-primary/20 w-fit mb-6 self-start">
+          <button
+            onClick={() => setConnectionsTab('apps')}
+            className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${connectionsTab === 'apps'
+              ? 'bg-primary/20 text-primary shadow-sm border border-primary/40'
+              : 'text-primary/60 hover:text-primary hover:bg-primary/10'
+              }`}
+          >
+            Core Apps
+          </button>
+          <button
+            onClick={() => setConnectionsTab('services')}
+            className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${connectionsTab === 'services'
+              ? 'bg-primary/20 text-primary shadow-sm border border-primary/40'
+              : 'text-primary/60 hover:text-primary hover:bg-primary/10'
+              }`}
+          >
+            Service Accounts
+          </button>
+        </div>
+
+        {connectionsTab === 'apps' && (
+          <div className="connection-list space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {/* Existing Cards */}
+            {[
+              {
+                title: 'Gmail',
+                description: gmailStatus?.connected
+                  ? `Signed in as ${gmailStatus.name ?? gmailStatus.email ?? 'operator'}.`
+                  : 'Connect your personal Gmail for primary identity & memories.',
+                action: gmailStatus?.connected ? 'Logout' : 'Connect',
+                onClick: onGmailAction,
+                loading: gmailLoading
+              },
+              {
+                title: 'Whoop',
+                description: whoopStatus?.connected
+                  ? 'Connected. Data syncs periodically.'
+                  : 'Connect Whoop to track recovery & sleep.',
+                action: whoopStatus?.connected ? 'Disconnect' : 'Connect',
+                onClick: () => {
+                  if (whoopStatus?.connected) {
+                    if (confirm('Disconnect Whoop?')) disconnectWhoop();
+                  } else {
+                    window.open(getAbsoluteApiUrl('whoop/connect'), '_blank', 'width=600,height=800');
+                  }
+                },
+                loading: whoopLoading
+              },
+              {
+                title: 'Bespoke memory',
+                description: 'Upload manually curated markdown notes and files.',
+                action: 'Open',
+                onClick: onOpenBespoke,
+                loading: false
+              }
+            ].map((card) => (
+              <div className="connection-item group" key={card.title}>
+                <div className="connection-meta">
+                  <div>
+                    <p className="connection-name flex items-center gap-2">
+                      {card.title}
+                      {card.title === 'Gmail' && gmailStatus?.connected && <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
+                    </p>
+                    <p className="connection-desc text-primary/60">{card.description}</p>
+                  </div>
+                </div>
+                <div className="connection-actions">
+                  <button type="button" onClick={card.onClick} disabled={card.loading} className="connection-manage transition-all hover:bg-primary/10 hover:text-primary">
+                    {card.action}
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="connection-actions">
-              <button type="button" onClick={card.onClick} disabled={card.loading} className="connection-manage">
-                {card.action}
-              </button>
-            </div>
+            ))}
           </div>
-        ))}
+        )}
+
+        {connectionsTab === 'services' && (
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="mb-6 bg-primary/5 border border-primary/20 p-4 rounded-md">
+              <p className="text-xs text-primary/80 leading-relaxed max-w-md">
+                <strong>Service Accounts</strong> are isolated connections (like a "College" or "Work" email) used solely for data ingestion.
+                They do not affect your primary identity or chat personality.
+              </p>
+            </div>
+            <ServiceAccountsSettings />
+          </div>
+        )}
       </div>
     );
   };
@@ -646,59 +720,67 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       )}
       <div className="profile-modal-overlay" onClick={onClose}>
         <div className="profile-modal" onClick={(evt) => evt.stopPropagation()}>
-        {/* <div className="profile-modal-header">
-          <div>
-            {profile && (profile.role || profile.company) && (
-              <p className="text-muted">
-                {[profile.role, profile.company].filter(Boolean).join(' @ ')}
-              </p>
-            )}
-          </div>
-        </div> */}
-        <div className="profile-modal-body-grid">
-          <aside className="profile-tabs">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                className={`profile-tab-button ${activeTab === tab.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </aside>
-          <div className="profile-tab-content" ref={tabContentRef}>
-            {renderActiveContent()}
-          </div>
-        </div>
-        <div className="profile-modal-footer">
-          <div className="footer-left">
-            <div className="profile-header-actions">
-              {isEditingProfile ? (
-                <>
-                  <button type="button" className="profile-edit-btn secondary" onClick={handleProfileCancel} disabled={savingProfile}>
-                    Cancel
+          <div className="profile-modal-body-grid">
+            <aside className="profile-tabs flex flex-col gap-0.5 border-r border-green-900/30 bg-black/20 p-2 min-w-[140px]">
+              <div className="mb-4 px-2 pt-2">
+                <span className="text-[10px] uppercase font-bold tracking-widest text-green-700/60">Menu</span>
+              </div>
+              {TABS.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`
+                            relative text-left px-3 py-2 rounded-md transition-all duration-200 text-sm font-medium
+                            ${isActive
+                        ? 'bg-green-900/20 text-green-300 shadow-sm'
+                        : 'text-green-700/70 hover:text-green-400 hover:bg-green-900/10'
+                      }
+                        `}
+                  >
+                    {isActive && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-green-500 rounded-r-full shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                    )}
+                    <span className={`relative z-10 ${isActive ? 'translate-x-1' : ''} transition-transform duration-200 block`}>
+                      {tab.label}
+                    </span>
                   </button>
-                  <button type="button" className="profile-edit-btn primary" onClick={handleProfileSave} disabled={savingProfile}>
-                    {savingProfile ? 'Saving…' : 'Save changes'}
-                  </button>
-                </>
-              ) : (
-                <button type="button" className="profile-edit-btn primary" onClick={() => setIsEditingProfile(true)}>
-                  Edit
-                </button>
-              )}
+                );
+              })}
+            </aside>
+            <div className="profile-tab-content bg-[#0A0C0A]" ref={tabContentRef}>
+              {renderActiveContent()}
             </div>
           </div>
-          <div className="footer-right">
-            <button className="profile-done-btn" type="button" onClick={onClose}>
-              Done
-            </button>
+          <div className="profile-modal-footer">
+            <div className="footer-left">
+              <div className="profile-header-actions">
+                {isEditingProfile ? (
+                  <>
+                    <button type="button" className="profile-edit-btn secondary" onClick={handleProfileCancel} disabled={savingProfile}>
+                      Cancel
+                    </button>
+                    <button type="button" className="profile-edit-btn primary" onClick={handleProfileSave} disabled={savingProfile}>
+                      {savingProfile ? 'Saving…' : 'Save changes'}
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="profile-edit-btn primary" onClick={() => setIsEditingProfile(true)}>
+                    Edit
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="footer-right">
+              <button className="profile-done-btn" type="button" onClick={onClose}>
+                Done
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </>
   );
 }
