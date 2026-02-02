@@ -21,15 +21,12 @@ export function WhoopCard({ data }: { data: WhoopData }) {
     const { score, sleep, hrv, rhr, spo2, skinTempCelsius, cycle, sleep_data, workout, measurements } = data.metadata;
 
     const getRecoveryColor = (s: number) => {
-        if (s >= 67) return '#2ea084'; // Greenish
-        if (s >= 34) return '#d4a017'; // Yellowish
-        return '#cf3b3b'; // Reddish
+        if (s >= 67) return '#EDE6D6';
+        if (s >= 34) return 'rgba(237,230,214,0.55)';
+        return 'rgba(237,230,214,0.4)';
     };
 
     const ringColor = getRecoveryColor(score);
-    const radius = 30;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (score / 100) * circumference;
 
     // Calculations
     const cycleScore = cycle?.score as Record<string, unknown> | undefined;
@@ -47,84 +44,59 @@ export function WhoopCard({ data }: { data: WhoopData }) {
     const workoutName = workout?.sport_name ?? workout?.name ?? null;
     const maxHR = measurements?.max_heart_rate != null ? Number(measurements.max_heart_rate) : null;
 
+    const r = 24;
+    const c = 2 * Math.PI * r;
+    const off = c - (score / 100) * c;
     return (
-        <div className="group relative p-5 rounded-xl bg-gradient-to-br from-primary/5 to-black border border-primary/20 hover:border-primary/40 transition-all duration-300 shadow-lg shadow-black/50 overflow-hidden">
-            {/* Header */}
+        <div className="card">
             <div className="flex justify-between items-start mb-4">
                 <div>
-                    <span className="px-2 py-0.5 rounded-full bg-primary/10 text-[10px] text-primary/60 font-mono tracking-wider uppercase border border-primary/20 mb-1 inline-block">
-                        Health
-                    </span>
-                    <h3 className="text-lg font-bold text-white tracking-tight">Whoop Metrics</h3>
-                    <span className="text-[10px] text-white/30 font-mono">{new Date().toLocaleDateString()}</span>
+                    <span className="text-[11px] text-[var(--text-muted)]">Health</span>
+                    <h3 className="text-[15px] font-semibold text-[var(--text)] mt-0.5">Whoop</h3>
                 </div>
-
-                {/* Recovery Ring (Right Top) */}
-                <div className="relative w-16 h-16 flex items-center justify-center">
+                <div className="relative w-12 h-12 flex items-center justify-center">
                     <svg className="w-full h-full transform -rotate-90">
-                        <circle cx="32" cy="32" r={radius} stroke="currentColor" strokeWidth="4" fill="transparent" className="text-white/5" />
-                        <circle cx="32" cy="32" r={radius} stroke={ringColor} strokeWidth="4" fill="transparent" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" className="transition-all duration-1000 ease-out" />
+                        <circle cx="24" cy="24" r={r} stroke="var(--border)" strokeWidth="3" fill="transparent" />
+                        <circle cx="24" cy="24" r={r} stroke={ringColor} strokeWidth="3" fill="transparent" strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round" />
                     </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-sm font-bold" style={{ color: ringColor }}>{score}%</span>
-                        <span className="text-[8px] text-white/40 uppercase">Rec</span>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-[12px] font-semibold" style={{ color: ringColor }}>{score}%</span>
                     </div>
                 </div>
             </div>
-
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-2 gap-4">
-                {/* Sleep Section */}
-                <div className="p-3 rounded-lg bg-white/5 border border-white/5">
-                    <div className="flex justify-between items-end mb-2">
-                        <span className="text-[10px] uppercase text-white/40 font-bold">Sleep</span>
-                        <span className="text-xs font-mono text-blue-400">{sleep}%</span>
+            <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-[var(--bg)] border border-[var(--border)]">
+                    <div className="flex justify-between items-end mb-1">
+                        <span className="text-[11px] text-[var(--text-muted)]">Sleep</span>
+                        <span className="text-[13px] font-medium text-[var(--text)]">{sleep}%</span>
                     </div>
-                    <div className="w-full h-1 bg-white/10 rounded-full mb-2">
-                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(sleep, 100)}%` }} />
+                    <div className="w-full h-1 bg-[var(--border)] rounded-full mb-1">
+                        <div className="h-full rounded-full bg-[var(--text-muted)]" style={{ width: `${Math.min(sleep, 100)}%` }} />
                     </div>
-                    <div className="flex justify-between text-[10px] text-white/50">
-                        <span>{sleepHours} hrs</span>
-                        <span>Eff: {sleepEfficiency}%</span>
-                    </div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{sleepHours}h · Eff {sleepEfficiency}%</div>
                 </div>
-
-                {/* Strain Section */}
-                <div className="p-3 rounded-lg bg-white/5 border border-white/5">
-                    <div className="flex justify-between items-end mb-2">
-                        <span className="text-[10px] uppercase text-white/40 font-bold">Strain</span>
-                        <span className="text-xs font-mono text-blue-500">{strain.toFixed(1)}</span>
+                <div className="p-3 rounded-lg bg-[var(--bg)] border border-[var(--border)]">
+                    <div className="flex justify-between items-end mb-1">
+                        <span className="text-[11px] text-[var(--text-muted)]">Strain</span>
+                        <span className="text-[13px] font-medium text-[var(--text)]">{strain.toFixed(1)}</span>
                     </div>
-                    <div className="w-full h-1 bg-white/10 rounded-full mb-2">
-                        <div className="h-full bg-blue-600 rounded-full" style={{ width: `${strainPercent}%` }} />
+                    <div className="w-full h-1 bg-[var(--border)] rounded-full mb-1">
+                        <div className="h-full rounded-full bg-[var(--text-muted)]" style={{ width: `${strainPercent}%` }} />
                     </div>
-                    <div className="flex justify-between text-[10px] text-white/50">
-                        <span>{calories} cal</span>
-                        <span>{strain > 14 ? 'High' : 'Normal'}</span>
-                    </div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{calories} cal</div>
                 </div>
             </div>
-
-            {/* Last Workout (if available) */}
             {workoutName && (
-                <div className="mt-3 pt-3 border-t border-white/5 text-[10px] text-white/50">
-                    Last: <span className="text-white/70 capitalize">{String(workoutName)}</span>
+                <div className="mt-3 pt-3 border-t border-[var(--border)] text-[11px] text-[var(--text-muted)]">
+                    Last: <span className="text-[var(--text)] capitalize">{String(workoutName)}</span>
                 </div>
             )}
-
-            {/* Recovery metrics: HRV, RHR (from Whoop recovery API) */}
-            <div className="mt-4 pt-3 border-t border-white/5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/40">
-                <span>HRV: <span className="text-white/70 font-mono">{Math.round(hrv)} ms</span></span>
-                <span>RHR: <span className="text-white/70 font-mono">{rhrDisplay != null ? rhrDisplay : '—'}</span></span>
-                {spo2 != null && (
-                    <span>SpO2: <span className="text-white/70 font-mono">{Number(spo2).toFixed(1)}%</span></span>
-                )}
-                {skinTempCelsius != null && (
-                    <span>Skin: <span className="text-white/70 font-mono">{Number(skinTempCelsius).toFixed(1)}°C</span></span>
-                )}
-                {maxHR != null && (
-                    <span>Max HR: <span className="text-white/70 font-mono">{maxHR}</span></span>
-                )}
+            <div className="mt-3 pt-3 border-t border-[var(--border)] flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--text-muted)]">
+                <span>HRV <span className="text-[var(--text)] font-medium">{Math.round(hrv)} ms</span></span>
+                <span>RHR <span className="text-[var(--text)] font-medium">{rhrDisplay != null ? rhrDisplay : '—'}</span></span>
+                {spo2 != null && <span>SpO2 <span className="text-[var(--text)]">{Number(spo2).toFixed(1)}%</span></span>}
+                {skinTempCelsius != null && <span>Skin <span className="text-[var(--text)]">{Number(skinTempCelsius).toFixed(1)}°C</span></span>}
+                {maxHR != null && <span>Max HR <span className="text-[var(--text)]">{maxHR}</span></span>}
             </div>
         </div>
     );

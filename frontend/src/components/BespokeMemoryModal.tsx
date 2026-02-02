@@ -11,21 +11,12 @@ import {
   memo
 } from 'react';
 import { gatewayFetch } from '@/lib/gatewayFetch';
-const FILE_GRAPH_LIMIT = 320;
 
 interface BespokeMemoryModalProps {
   onClose: () => void;
 }
 
 export type BespokeIngestionStatus = 'chunking' | 'chunked' | 'indexing' | 'uploaded' | 'failed';
-
-export interface BespokeGraphMetrics {
-  chunk_count?: number | null;
-  section_count?: number | null;
-  avg_chunk_tokens?: number | null;
-  max_chunk_tokens?: number | null;
-  [key: string]: unknown;
-}
 
 export interface BespokeStatus {
   id: string;
@@ -40,34 +31,6 @@ export interface BespokeStatus {
   lastIndexedAt: string | null;
   batchName: string | null;
   error: string | null;
-  graphMetrics: BespokeGraphMetrics | null;
-  graphSyncedAt: string | null;
-}
-
-export interface FileGraphNode {
-  id: string;
-  label: string;
-  filePath: string;
-  ingestionId: string;
-  batchName: string | null;
-  createdAt: string;
-}
-
-export interface FileGraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  ingestionId: string;
-}
-
-export interface FileGraphResponse {
-  nodes: FileGraphNode[];
-  edges: FileGraphEdge[];
-  meta: {
-    nodeCount: number;
-    edgeCount: number;
-    ingestionCount: number;
-  };
 }
 
 type UploadStage = 'idle' | 'uploading';
@@ -90,9 +53,6 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
-  const [graphData, setGraphData] = useState<FileGraphResponse | null>(null);
-  const [graphLoading, setGraphLoading] = useState(true);
-  const [graphError, setGraphError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const handleOpenFilePicker = useCallback(() => {
     fileInputRef.current?.click();
@@ -126,53 +86,17 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
     }
   }, []);
 
-  const loadFileGraph = useCallback(
-    async (options?: { withLoader?: boolean }) => {
-      const withLoader = options?.withLoader ?? false;
-      if (withLoader) {
-        setGraphLoading(true);
-      }
-      setGraphError(null);
-      try {
-        const params = new URLSearchParams({
-          limit: String(FILE_GRAPH_LIMIT)
-        });
-        const response = await gatewayFetch(`memory/graph?${params.toString()}`);
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          throw new Error(payload.error || 'Failed to load file graph');
-        }
-        const data = await response.json();
-        setGraphData((prev) => {
-          if (prev && shallowGraphEqual(prev, data.graph ?? null)) {
-            return prev;
-          }
-          return data.graph ?? null;
-        });
-      } catch (error) {
-        console.error('Failed to load file graph', error);
-        setGraphError((error as Error).message || 'Failed to load graph');
-        setGraphData(null);
-      } finally {
-        setGraphLoading(false);
-      }
-    },
-    []
-  );
-
   const refreshAll = useCallback(() => {
     loadStatus();
     loadHistory();
-    loadFileGraph();
-  }, [loadStatus, loadHistory, loadFileGraph]);
+  }, [loadStatus, loadHistory]);
 
   useEffect(() => {
     loadStatus();
     loadHistory();
-    loadFileGraph({ withLoader: true });
     const interval = setInterval(refreshAll, 300000);
     return () => clearInterval(interval);
-  }, [loadStatus, loadHistory, loadFileGraph, refreshAll]);
+  }, [loadStatus, loadHistory, refreshAll]);
 
   useEffect(() => {
     if (!statusData) {
@@ -266,7 +190,6 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
       }
       await loadStatus();
       await loadHistory();
-      await loadFileGraph();
     } catch (error) {
       console.error('Failed to upload bespoke memory', error);
       setUploadError((error as Error).message || 'Upload failed');
@@ -280,22 +203,6 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
     }
   }
 
-  async function handleReindex(ingestionId: string) {
-    setActionLoading(ingestionId);
-    try {
-      const response = await gatewayFetch(`memory/${ingestionId}/reindex`, {
-        method: 'POST'
-      });
-      if (!response.ok) throw new Error('Failed to queue re-index');
-      await loadStatus();
-      await loadHistory();
-    } catch (error) {
-      console.error('Failed to reindex ingestion', error);
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
   async function handleDelete(ingestionId: string) {
     setActionLoading(ingestionId);
     try {
@@ -305,7 +212,6 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
       if (!response.ok) throw new Error('Failed to delete ingestion');
       await loadStatus();
       await loadHistory();
-      await loadFileGraph();
     } catch (error) {
       console.error('Failed to delete ingestion', error);
     } finally {
@@ -323,7 +229,6 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
       if (!response.ok) throw new Error('Failed to clear bespoke memories');
       await loadStatus();
       await loadHistory();
-      await loadFileGraph();
       setFileQueue([]);
       setUploadStage('idle');
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -338,66 +243,34 @@ export function BespokeMemoryModal({ onClose }: BespokeMemoryModalProps) {
     <div className="profile-modal-overlay" onClick={onClose}>
       <div className="profile-modal memory-modal" onClick={(evt) => evt.stopPropagation()}>
         <div className="profile-modal-header">
-          <div>
-            <p className="profile-name">Index</p>
-          </div>
+          <span>Index</span>
         </div>
         <div className="profile-modal-body">
-          <div className="memory-columns">
-            <div className="memory-left-column">
-              <UploadSection
-                dragActive={dragActive}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                fileInputRef={fileInputRef}
-                onFileChange={handleFileChange}
-                allowedExtensions={allowedExtensions}
-                uploadStage={uploadStage}
-                fileQueue={fileQueue}
-                isUploading={isUploading}
-                onOpenPicker={handleOpenFilePicker}
-                uploadError={uploadError}
-                statusData={statusData}
-                statusLoading={statusLoading}
-              />
-              <HistorySection
-                history={history}
-                historyLoading={historyLoading}
-                clearingAll={clearingAll}
-                onClearAll={handleClearAll}
-                onDelete={handleDelete}
-                actionLoadingId={actionLoading}
-              />
-            </div>
-            <div className="memory-right-column">
-              <section className="memory-graph-section">
-                <div className="memory-history-header">
-                  <h3>Graph View</h3>
-                </div>
-                <div className="memory-graph-shell">
-                  {graphLoading ? (
-                    <div className="memory-graph-panel">
-                      <div className="memory-graph-placeholder">
-                        <p>Building your knowledge map…</p>
-                      </div>
-                    </div>
-                  ) : graphData && graphData.nodes.length > 0 ? (
-                    <MemoryGraphPanel graph={graphData} loading={graphLoading} error={graphError} />
-                  ) : (
-                    <div className="memory-graph-panel">
-                      <div className="memory-graph-placeholder">
-                        <div className="memory-empty-copy">
-                          <p>This is your personal knowledge space.</p>
-                          <p>Upload journals, notes, or writing so the system understands how you think.</p>
-                          <p>Everything stays private and grounds responses in your reality.</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </section>
-            </div>
+          <div className="memory-single-column">
+            <UploadSection
+              dragActive={dragActive}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              fileInputRef={fileInputRef}
+              onFileChange={handleFileChange}
+              allowedExtensions={allowedExtensions}
+              uploadStage={uploadStage}
+              fileQueue={fileQueue}
+              isUploading={isUploading}
+              onOpenPicker={handleOpenFilePicker}
+              uploadError={uploadError}
+              statusData={statusData}
+              statusLoading={statusLoading}
+            />
+            <HistorySection
+              history={history}
+              historyLoading={historyLoading}
+              clearingAll={clearingAll}
+              onClearAll={handleClearAll}
+              onDelete={handleDelete}
+              actionLoadingId={actionLoading}
+            />
           </div>
         </div>
         <div className="bespoke-modal-footer">
@@ -463,7 +336,7 @@ const UploadSection = memo(function UploadSection({
 }: UploadSectionProps) {
   return (
     <section>
-      <h3>Upload Local Folder</h3>
+      <h3>Upload</h3>
       <div
         className={`memory-dropzone ${dragActive ? 'active' : ''}`}
         onDragOver={onDragOver}
@@ -584,198 +457,3 @@ const HistorySection = memo(function HistorySection({
     </section>
   );
 });
-
-const MemoryGraphPanel = memo(function MemoryGraphPanel({
-  graph,
-  loading,
-  error
-}: {
-  graph: FileGraphResponse | null;
-  loading: boolean;
-  error: string | null;
-}) {
-  const layout = useMemo(() => computeFileGraphLayout(graph), [graph]);
-
-  if (loading) {
-    return <p className="text-muted">Loading graph…</p>;
-  }
-  if (error) {
-    return <p className="profile-error">{error}</p>;
-  }
-  if (!graph || !layout || layout.nodes.length === 0) {
-    return <p className="text-muted">Graph not ready yet. Upload a batch and let indexing finish.</p>;
-  }
-
-  const nodeCount = graph.meta?.nodeCount ?? graph.nodes.length;
-  const edgeCount = graph.meta?.edgeCount ?? graph.edges.length;
-  const ingestionCount = graph.meta?.ingestionCount ?? 0;
-  const docDescription = `Graph ready: ${nodeCount} files · ${edgeCount} edges · ${ingestionCount} uploads.`;
-
-  return (
-    <div className="memory-graph-panel">
-      {/* <div className="graph-document-card">
-        <p className="graph-document-summary">{docDescription}</p>
-      </div> */}
-      <div className="graph-canvas">
-        <FileGraphCanvas layout={layout} />
-        <div className="graph-toggle-row">
-          <span>{nodeCount} Files</span>
-          {/* <span>· {edgeCount} edges</span> */}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-const GRAPH_WIDTH = 640;
-const GRAPH_HEIGHT = 420;
-
-interface PositionedFileNode extends FileGraphNode {
-  x: number;
-  y: number;
-  color: string;
-  radius: number;
-}
-
-interface FileGraphLayout {
-  nodes: PositionedFileNode[];
-  edges: {
-    id: string;
-    source: PositionedFileNode;
-    target: PositionedFileNode;
-    stroke: string;
-  }[];
-  bounds: {
-    minX: number;
-    maxX: number;
-    minY: number;
-    maxY: number;
-  };
-}
-
-function computeFileGraphLayout(graph: FileGraphResponse | null): FileGraphLayout | null {
-  if (!graph || !graph.nodes || graph.nodes.length === 0) return null;
-  const groupedByIngestion = new Map<string, FileGraphNode[]>();
-  graph.nodes.forEach((node) => {
-    const bucket = groupedByIngestion.get(node.ingestionId) ?? [];
-    bucket.push(node);
-    groupedByIngestion.set(node.ingestionId, bucket);
-  });
-  const maxRadius = Math.min(GRAPH_WIDTH, GRAPH_HEIGHT) / 2 - 40;
-  const groupCount = Math.max(1, groupedByIngestion.size);
-  const radiusStep = maxRadius / groupCount;
-  const baseRadius = radiusStep * 0.9;
-  const colorPalette = ['#7dd3fc', '#f472b6', '#a78bfa', '#facc15', '#34d399', '#fb7185'];
-  const positionedNodes: PositionedFileNode[] = [];
-  let groupIndex = 0;
-  groupedByIngestion.forEach((groupNodes) => {
-    const radius = Math.min(maxRadius, baseRadius + groupIndex * radiusStep);
-    const jitter = (Math.random() - 0.5) * 0.4;
-    groupNodes.forEach((node, idx) => {
-      const angle = (idx / Math.max(1, groupNodes.length)) * Math.PI * 2 + jitter;
-      const x = radius * Math.cos(angle);
-      const y = radius * Math.sin(angle);
-      positionedNodes.push({
-        ...node,
-        x,
-        y,
-        color: colorPalette[groupIndex % colorPalette.length],
-        radius: 6
-      });
-    });
-    groupIndex += 1;
-  });
-  if (!groupedByIngestion.size) {
-    graph.nodes.forEach((node, idx) => {
-      const angle = (idx / Math.max(1, graph.nodes.length)) * Math.PI * 2;
-      positionedNodes.push({
-        ...node,
-        x: (maxRadius - 20) * Math.cos(angle),
-        y: (maxRadius - 20) * Math.sin(angle),
-        color: colorPalette[idx % colorPalette.length],
-        radius: 6
-      });
-    });
-  }
-  const nodeMap = new Map<string, PositionedFileNode>();
-  positionedNodes.forEach((node) => nodeMap.set(node.id, node));
-  const edges =
-    graph.edges?.map((edge) => {
-      const source = nodeMap.get(edge.source);
-      const target = nodeMap.get(edge.target);
-      if (!source || !target) return null;
-      return {
-        id: edge.id,
-        source,
-        target,
-        stroke: 'rgba(86, 238, 255, 0.45)'
-      };
-    }) ?? [];
-  const filteredEdges = (edges.filter(Boolean) as FileGraphLayout['edges']) ?? [];
-  const bounds = positionedNodes.reduce(
-    (acc, node) => ({
-      minX: Math.min(acc.minX, node.x),
-      maxX: Math.max(acc.maxX, node.x),
-      minY: Math.min(acc.minY, node.y),
-      maxY: Math.max(acc.maxY, node.y)
-    }),
-    { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
-  );
-  return {
-    nodes: positionedNodes,
-    edges: filteredEdges,
-    bounds
-  };
-}
-
-function shallowGraphEqual(a: FileGraphResponse | null, b: FileGraphResponse | null) {
-  if (!a || !b) return false;
-  if ((a.nodes?.length ?? 0) !== (b.nodes?.length ?? 0)) return false;
-  if ((a.edges?.length ?? 0) !== (b.edges?.length ?? 0)) return false;
-  const nodeKey = (node: FileGraphNode) => `${node.id}-${node.filePath}-${node.ingestionId}`;
-  const aNodeKeys = (a.nodes ?? []).map(nodeKey).join('|');
-  const bNodeKeys = (b.nodes ?? []).map(nodeKey).join('|');
-  if (aNodeKeys !== bNodeKeys) return false;
-  const edgeKey = (edge: FileGraphEdge) => `${edge.id}-${edge.source}-${edge.target}`;
-  const aEdgeKeys = (a.edges ?? []).map(edgeKey).join('|');
-  const bEdgeKeys = (b.edges ?? []).map(edgeKey).join('|');
-  return aEdgeKeys === bEdgeKeys;
-}
-
-function FileGraphCanvas({ layout }: { layout: FileGraphLayout }) {
-  const width = GRAPH_WIDTH;
-  const height = GRAPH_HEIGHT;
-  const margin = 40;
-  const minX = Math.min(-width / 2, layout.bounds.minX - margin);
-  const maxX = Math.max(width / 2, layout.bounds.maxX + margin);
-  const minY = Math.min(-height / 2, layout.bounds.minY - margin);
-  const maxY = Math.max(height / 2, layout.bounds.maxY + margin);
-  const viewBox = `${minX} ${minY} ${maxX - minX} ${maxY - minY}`;
-  return (
-    <svg className="graph-svg" viewBox={viewBox} role="img" aria-label="Bespoke memory graph">
-      <g strokeWidth={1}>
-        {layout.edges.map((edge) => (
-          <line
-            key={edge.id}
-            x1={edge.source.x}
-            y1={edge.source.y}
-            x2={edge.target.x}
-            y2={edge.target.y}
-            stroke={edge.stroke}
-            strokeOpacity={0.8}
-          />
-        ))}
-      </g>
-      <g>
-        {layout.nodes.map((node) => (
-          <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
-            <circle r={node.radius} fill={node.color} stroke="rgba(0,0,0,0.6)" strokeWidth={1} />
-            <text y={-node.radius - 4} textAnchor="middle" fill="#ffffff" fontSize="12">
-              {node.label}
-            </text>
-          </g>
-        ))}
-      </g>
-    </svg>
-  );
-}

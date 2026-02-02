@@ -13,17 +13,10 @@ const FeedTimeline: React.FC<FeedTimelineProps> = ({ cards }) => {
     const filteredCards = cards.filter(card => card.type !== 'recovery');
 
     return (
-        <div className="relative py-8 px-6 max-w-4xl mx-auto">
-            <div className="space-y-0">
-                {filteredCards.map((card, index) => (
-                    <React.Fragment key={card.id || index}>
-                        <TimelineItem card={card} index={index} />
-                        {index < filteredCards.length - 1 && (
-                            <div className="my-6 border-t border-white/5" />
-                        )}
-                    </React.Fragment>
-                ))}
-            </div>
+        <div className="space-y-6">
+            {filteredCards.map((card, index) => (
+                <TimelineItem key={card.id || index} card={card} index={index} />
+            ))}
         </div>
     );
 };
@@ -37,8 +30,8 @@ const TimelineItem: React.FC<{ card: FeedCardProps; index: number }> = ({ card, 
                 return <VitalsCard data={card.data} />;
             case 'insight':
                 return (
-                    <div className="text-white/70 text-sm leading-relaxed">
-                        {card.data.text}
+                    <div className="card text-[var(--dutch-white-soft)] text-[15px] leading-relaxed">
+                        {card.data?.text}
                     </div>
                 );
             default:

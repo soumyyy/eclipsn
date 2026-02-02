@@ -82,7 +82,7 @@ export function ServiceAccountsSettings() {
         return (
             <div className="space-y-4 animate-pulse p-4">
                 {[1, 2].map(i => (
-                    <div key={i} className="h-20 bg-primary/5 border border-primary/20 rounded-lg"></div>
+                    <div key={i} className="h-20 bg-[var(--surface)] border border-[var(--border)] rounded-xl" />
                 ))}
             </div>
         );
@@ -91,61 +91,52 @@ export function ServiceAccountsSettings() {
     return (
         <div className="space-y-6 relative p-1">
             {error && (
-                <div className="bg-red-900/20 border border-red-500/50 p-4 rounded text-red-300 text-sm flex items-center gap-2">
-                    <span className="text-lg">⚠</span> {error}
+                <div className="p-4 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-muted)] text-sm flex items-center gap-2">
+                    <span>⚠</span> {error}
                 </div>
             )}
 
             <div className="space-y-4">
                 {accounts.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 border border-dashed border-primary/20 rounded-xl bg-primary/5 text-center">
-                        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-4 text-2xl text-primary shadow-lg shadow-primary/5">
-                            ✉️
-                        </div>
-                        <h3 className="text-primary font-semibold mb-2">No accounts connected</h3>
-                        <p className="text-primary/60 text-sm max-w-xs mb-6 leading-relaxed">
-                            Connect any secondary Gmail account to automatically ingest schedules, documents, and other relevant data.
+                    <div className="flex flex-col items-center justify-center py-12 border border-dashed border-[var(--border)] rounded-xl bg-[var(--surface)] text-center">
+                        <h3 className="text-[var(--text)] font-semibold mb-2">No accounts connected</h3>
+                        <p className="text-[var(--text-muted)] text-sm max-w-xs mb-6 leading-relaxed">
+                            Connect a secondary Gmail account to ingest calendars and documents.
                         </p>
                         <button
                             onClick={startConnect}
-                            className="bg-primary hover:bg-primary/90 text-background font-bold py-2.5 px-6 rounded-lg shadow-[0_0_15px_rgba(215,206,185,0.3)] transition-all transform hover:scale-105 active:scale-95"
+                            className="btn btn-primary"
                         >
-                            Connect Gmail Account
+                            Connect Gmail
                         </button>
                     </div>
                 ) : (
                     accounts.map(account => (
-                        <div key={account.id} className="group relative flex flex-col sm:flex-row sm:items-center justify-between p-5 border border-primary/20 bg-gradient-to-br from-primary/5 to-black rounded-xl gap-4 transition-all hover:border-primary/40 hover:shadow-[0_0_20px_rgba(215,206,185,0.05)]">
+                        <div key={account.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-[var(--border)] bg-[var(--surface)] rounded-xl gap-4">
                             <div className="space-y-1.5">
                                 <div className="flex items-center gap-3">
-                                    <span className="text-lg font-semibold text-primary tracking-tight">
+                                    <span className="text-[15px] font-medium text-[var(--text)]">
                                         {(account as any).name ? (account as any).name : 'Service Account'}
                                     </span>
-                                    <span className="text-[10px] uppercase font-bold tracking-wider bg-primary/20 text-primary px-2 py-0.5 rounded border border-primary/30">
+                                    <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] px-2 py-0.5 rounded border border-[var(--border)]">
                                         {account.provider}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-2 text-sm text-primary/80 font-mono">
-                                    <span>{account.email}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs text-primary/50">
-                                    <span className="opacity-70">FILTERS:</span>
-                                    <span>
-                                        {account.filterKeywords?.length ? account.filterKeywords.join(', ') : 'All pdfs (3mo)'}
-                                    </span>
+                                <div className="text-sm text-[var(--text-muted)] font-mono">{account.email}</div>
+                                <div className="text-xs text-[var(--text-tertiary)]">
+                                    {account.filterKeywords?.length ? account.filterKeywords.join(', ') : 'All pdfs (3mo)'}
                                 </div>
                             </div>
-
                             <div className="flex items-center gap-3">
                                 <button
                                     onClick={() => handleSync(account.id)}
-                                    className="flex items-center gap-2 px-4 py-2 text-xs font-bold border border-primary/30 bg-primary/10 hover:bg-primary/20 hover:border-primary rounded-lg text-primary transition-all uppercase tracking-wide hover:shadow-lg"
+                                    className="connection-manage"
                                 >
-                                    <span className="text-primary">⟳</span> Sync
+                                    Sync
                                 </button>
                                 <button
                                     onClick={() => handleDisconnect(account.id)}
-                                    className="px-3 py-2 text-xs font-bold text-red-400/80 hover:text-red-300 hover:bg-red-950/30 rounded-lg transition-colors uppercase tracking-wide"
+                                    className="px-3 py-2 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)] rounded-lg transition-colors"
                                 >
                                     Disconnect
                                 </button>
@@ -155,12 +146,12 @@ export function ServiceAccountsSettings() {
                 )}
 
                 {accounts.length > 0 && (
-                    <div className="flex justify-start pt-4">
+                    <div className="flex justify-start pt-2">
                         <button
                             onClick={startConnect}
-                            className="flex items-center gap-2 text-xs font-bold text-primary hover:text-primary/80 transition-colors px-3 py-2 rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/20"
+                            className="text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors px-3 py-2 rounded-lg"
                         >
-                            <span className="text-lg leading-none font-light">+</span> CONNECT ANOTHER ACCOUNT
+                            + Add account
                         </button>
                     </div>
                 )}
@@ -171,17 +162,17 @@ export function ServiceAccountsSettings() {
             )}
 
             {showNameModal && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowNameModal(false)}>
-                    <div className="bg-[#1f2025] border border-primary/30 w-full max-w-sm rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.8)] p-6 space-y-5" onClick={e => e.stopPropagation()}>
+                <div className="modal-overlay" onClick={() => setShowNameModal(false)}>
+                    <div className="modal-panel p-6 space-y-5" onClick={e => e.stopPropagation()}>
                         <div className="space-y-2">
-                            <h3 className="text-xl font-semibold text-primary">Name this account</h3>
-                            <p className="text-sm text-primary/70 leading-relaxed">
-                                Give this connection a label (e.g. "Personal", "Work") to easily identify it later.
+                            <h3 className="text-[17px] font-semibold text-[var(--text)]">Name this account</h3>
+                            <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                                Give this connection a label (e.g. Personal, Work).
                             </p>
                         </div>
                         <input
                             type="text"
-                            className="w-full bg-primary/10 border border-primary/30 rounded-lg px-4 py-3 text-primary placeholder-primary/30 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-medium"
+                            className="chat-input w-full"
                             placeholder="e.g. College"
                             autoFocus
                             value={accountName}
@@ -193,17 +184,19 @@ export function ServiceAccountsSettings() {
                         />
                         <div className="flex justify-end gap-3 pt-2">
                             <button
+                                type="button"
                                 onClick={() => setShowNameModal(false)}
-                                className="px-4 py-2 text-sm font-medium text-primary/70 hover:text-primary transition-colors"
+                                className="btn btn-secondary"
                             >
                                 Cancel
                             </button>
                             <button
+                                type="button"
                                 onClick={handleConnectWithLabel}
                                 disabled={!accountName.trim()}
-                                className="px-5 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-background text-sm font-bold rounded-lg shadow-lg shadow-primary/20 transition-all transform active:scale-95"
+                                className="btn btn-primary"
                             >
-                                Continue →
+                                Continue
                             </button>
                         </div>
                     </div>

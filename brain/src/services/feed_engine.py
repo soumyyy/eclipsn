@@ -167,46 +167,51 @@ class FeedEngine:
             )
             logger.info("Skipping LLM – OPENAI_API_KEY not set; saving fallback briefing.")
 
-        # Briefing Card
-        await self._save_card(FeedCard(
-            user_id=user_id,
-            type='briefing',
-            priority_score=1.0, 
-            data=FeedCardData(
-                title="Daily Briefing",
-                content=briefing_content,
-                metadata={
-                    "date": datetime.now(timezone.utc).isoformat(),
-                    "event_count": len(events),
-                    "email_count": len(raw_threads)
-                }
-            )
-        ))
+        # Briefing Card – one per day: update existing or insert
+        await self._upsert_card_for_today(
+            FeedCard(
+                user_id=user_id,
+                type='briefing',
+                priority_score=1.0,
+                data=FeedCardData(
+                    title="Daily Briefing",
+                    content=briefing_content,
+                    metadata={
+                        "date": datetime.now(timezone.utc).isoformat(),
+                        "event_count": len(events),
+                        "email_count": len(raw_threads)
+                    }
+                )
+            ),
+            today_start,
+            today_end,
+        )
 
-        # Whoop Recovery Card (kept separate for visual pop)
+        # Whoop Recovery Card – one per day (today_start/today_end from top of method)
         if whoop_data:
             recovery_score = whoop_data.get('score', {}).get('recovery_score', 0)
             sleep_score = whoop_data.get('score', {}).get('sleep_performance_percentage', 0)
             hrv = whoop_data.get('score', {}).get('hrv_rmssd_milli', 0)
-            
-            # Simple advice based on score
             advice = "Rest day." if recovery_score < 33 else "Ready to train." if recovery_score > 66 else "Steady effort."
-
-            await self._save_card(FeedCard(
-                user_id=user_id,
-                type='recovery',
-                priority_score=0.9,
-                data=FeedCardData(
-                    title="Recovery",
-                    content=f"**{advice}** HRV is {int(hrv)}ms.",
-                    metadata={
-                        "score": recovery_score,
-                        "sleep": sleep_score,
-                        "hrv": hrv,
-                        "state": whoop_data.get('score', {}).get('recovery_score_state_id')
-                    }
-                )
-            ))
+            await self._upsert_card_for_today(
+                FeedCard(
+                    user_id=user_id,
+                    type='recovery',
+                    priority_score=0.9,
+                    data=FeedCardData(
+                        title="Recovery",
+                        content=f"**{advice}** HRV is {int(hrv)}ms.",
+                        metadata={
+                            "score": recovery_score,
+                            "sleep": sleep_score,
+                            "hrv": hrv,
+                            "state": whoop_data.get('score', {}).get('recovery_score_state_id')
+                        }
+                    )
+                ),
+                today_start,
+                today_end,
+            )
 
         # Vitals / Readiness card: sleep vs 7h55m target, HRV/RHR vs monthly baselines, actionable summary
         await self._generate_vitals_card(user_id, whoop_data)
@@ -323,33 +328,88 @@ class FeedEngine:
 
         content = "\n\n".join(["\n".join(bullets), f"**Summary:** {verdict}"]) if bullets else f"**Summary:** {verdict}"
 
-        await self._save_card(FeedCard(
-            user_id=user_id,
-            type="vitals",
-            priority_score=0.95,
-            data=FeedCardData(
-                title="How You're Doing Today",
-                content=content,
-                metadata={
-                    "sleep_minutes": round(sleep_minutes, 1),
-                    "sleep_target_minutes": SLEEP_TARGET_MINUTES,
-                    "sleep_vs_target": sleep_vs_target,
-                    "hrv_ms": round(hrv_ms, 2),
-                    "hrv_vs_baseline": hrv_vs_baseline,
-                    "rhr": rhr,
-                    "rhr_vs_baseline": rhr_vs_baseline,
-                    "recovery_score": recovery_score,
-                    "avg_hrv_ms": round(avg_hrv, 2),
-                    "avg_rhr": avg_rhr,
-                    "avg_sleep_minutes": round(avg_sleep_min, 1),
-                    "verdict": verdict,
-                    "sample_count": (baselines or {}).get("sampleCount", 0),
-                },
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today_start + timedelta(days=1)
+        await self._upsert_card_for_today(
+            FeedCard(
+                user_id=user_id,
+                type="vitals",
+                priority_score=0.95,
+                data=FeedCardData(
+                    title="How You're Doing Today",
+                    content=content,
+                    metadata={
+                        "sleep_minutes": round(sleep_minutes, 1),
+                        "sleep_target_minutes": SLEEP_TARGET_MINUTES,
+                        "sleep_vs_target": sleep_vs_target,
+                        "hrv_ms": round(hrv_ms, 2),
+                        "hrv_vs_baseline": hrv_vs_baseline,
+                        "rhr": rhr,
+                        "rhr_vs_baseline": rhr_vs_baseline,
+                        "recovery_score": recovery_score,
+                        "avg_hrv_ms": round(avg_hrv, 2),
+                        "avg_rhr": avg_rhr,
+                        "avg_sleep_minutes": round(avg_sleep_min, 1),
+                        "verdict": verdict,
+                        "sample_count": (baselines or {}).get("sampleCount", 0),
+                    },
+                ),
             ),
-        ))
+            today_start,
+            today_end,
+        )
+
+    async def _upsert_card_for_today(
+        self, card: FeedCard, today_start: datetime, today_end: datetime
+    ) -> None:
+        """Ensure at most one active card per (user, type) per calendar day: update existing or insert."""
+        try:
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                # Find existing active card for this user, type, and today (UTC)
+                row = await conn.fetchrow(
+                    """
+                    SELECT id FROM feed_cards
+                    WHERE user_id = $1 AND type = $2 AND status = 'active'
+                    AND created_at >= $3 AND created_at < $4
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    card.user_id,
+                    card.type,
+                    today_start,
+                    today_end,
+                )
+                if row:
+                    await conn.execute(
+                        """
+                        UPDATE feed_cards
+                        SET priority_score = $1, data = $2, created_at = NOW()
+                        WHERE id = $3
+                        """,
+                        card.priority_score,
+                        json.dumps(card.data.dict()),
+                        row["id"],
+                    )
+                    logger.info(f"Updated existing {card.type} card for today (id={row['id']})")
+                else:
+                    await conn.execute(
+                        """
+                        INSERT INTO feed_cards (user_id, type, priority_score, data, status, created_at, expires_at)
+                        VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+                        """,
+                        card.user_id,
+                        card.type,
+                        card.priority_score,
+                        json.dumps(card.data.dict()),
+                        card.status,
+                        card.expires_at,
+                    )
+        except Exception as e:
+            logger.error(f"Error upserting feed card: {e}")
 
     async def _save_card(self, card: FeedCard):
-        """Persist a card to the database."""
+        """Persist a card to the database (plain insert)."""
         try:
             pool = await get_pool()
             query = """

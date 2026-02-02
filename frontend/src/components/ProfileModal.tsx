@@ -433,13 +433,12 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   const renderConnectionsContent = () => {
     return (
       <div className="flex flex-col h-full min-h-[400px]">
-        {/* Sub-tabs Toggle */}
-        <div className="flex p-1 bg-primary/5 rounded-lg border border-primary/20 w-fit mb-6 self-start">
+        <div className="flex p-1 rounded-lg border border-[var(--border)] w-fit mb-6 self-start bg-[var(--bg)]">
           <button
             onClick={() => setConnectionsTab('apps')}
             className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${connectionsTab === 'apps'
-              ? 'bg-primary/20 text-primary shadow-sm border border-primary/40'
-              : 'text-primary/60 hover:text-primary hover:bg-primary/10'
+              ? 'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text)]'
               }`}
           >
             Core Apps
@@ -447,8 +446,8 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
           <button
             onClick={() => setConnectionsTab('services')}
             className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${connectionsTab === 'services'
-              ? 'bg-primary/20 text-primary shadow-sm border border-primary/40'
-              : 'text-primary/60 hover:text-primary hover:bg-primary/10'
+              ? 'bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)]'
+              : 'text-[var(--text-muted)] hover:text-[var(--text)]'
               }`}
           >
             Service Accounts
@@ -456,8 +455,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
         </div>
 
         {connectionsTab === 'apps' && (
-          <div className="connection-list space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* Existing Cards */}
+          <div className="connection-list space-y-3">
             {[
               {
                 title: 'Gmail',
@@ -491,32 +489,29 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
                 loading: false
               }
             ].map((card) => (
-              <div className="connection-item group" key={card.title}>
-                <div className="connection-meta">
-                  <div>
-                    <p className="connection-name flex items-center gap-2">
-                      {card.title}
-                      {card.title === 'Gmail' && gmailStatus?.connected && <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
-                    </p>
-                    <p className="connection-desc text-primary/60">{card.description}</p>
-                  </div>
+              <div className="connection-item" key={card.title}>
+                <div>
+                  <p className="connection-name">
+                    {card.title}
+                    {card.title === 'Gmail' && gmailStatus?.connected && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] animate-pulse ml-1.5 align-middle" />
+                    )}
+                  </p>
+                  <p className="connection-desc">{card.description}</p>
                 </div>
-                <div className="connection-actions">
-                  <button type="button" onClick={card.onClick} disabled={card.loading} className="connection-manage transition-all hover:bg-primary/10 hover:text-primary">
-                    {card.action}
-                  </button>
-                </div>
+                <button type="button" onClick={card.onClick} disabled={card.loading} className="connection-manage">
+                  {card.action}
+                </button>
               </div>
             ))}
           </div>
         )}
 
         {connectionsTab === 'services' && (
-          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="mb-6 bg-primary/5 border border-primary/20 p-4 rounded-md">
-              <p className="text-xs text-primary/80 leading-relaxed max-w-md">
-                <strong>Service Accounts</strong> are isolated connections (like a "College" or "Work" email) used solely for data ingestion.
-                They do not affect your primary identity or chat personality.
+          <div>
+            <div className="mb-6 p-4 rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+              <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">
+                <strong className="text-[var(--text)]">Service Accounts</strong> are isolated connections (e.g. work email) used for data ingestion only. They do not affect your primary identity or chat.
               </p>
             </div>
             <ServiceAccountsSettings />
@@ -721,10 +716,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       <div className="profile-modal-overlay" onClick={onClose}>
         <div className="profile-modal" onClick={(evt) => evt.stopPropagation()}>
           <div className="profile-modal-body-grid">
-            <aside className="profile-tabs flex flex-col gap-0.5 border-r border-green-900/30 bg-black/20 p-2 min-w-[140px]">
-              <div className="mb-4 px-2 pt-2">
-                <span className="text-[10px] uppercase font-bold tracking-widest text-green-700/60">Menu</span>
-              </div>
+            <aside className="profile-tabs min-w-[120px]">
               {TABS.map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
@@ -732,25 +724,14 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`
-                            relative text-left px-3 py-2 rounded-md transition-all duration-200 text-sm font-medium
-                            ${isActive
-                        ? 'bg-green-900/20 text-green-300 shadow-sm'
-                        : 'text-green-700/70 hover:text-green-400 hover:bg-green-900/10'
-                      }
-                        `}
+                    className={`profile-tab-button ${isActive ? 'active' : ''}`}
                   >
-                    {isActive && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-green-500 rounded-r-full shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                    )}
-                    <span className={`relative z-10 ${isActive ? 'translate-x-1' : ''} transition-transform duration-200 block`}>
-                      {tab.label}
-                    </span>
+                    {tab.label}
                   </button>
                 );
               })}
             </aside>
-            <div className="profile-tab-content bg-[#0A0C0A]" ref={tabContentRef}>
+            <div className="profile-tab-content" ref={tabContentRef}>
               {renderActiveContent()}
             </div>
           </div>

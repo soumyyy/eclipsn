@@ -4,7 +4,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState, Suspense } from 'react';
 import { GoogleSignInButton } from '@/components/login/GoogleSignInButton';
 import { OnboardingPrompt, type OnboardingQuestion } from '@/components/login/OnboardingPrompt';
-import { VideoBackground } from '@/components/login/VideoBackground';
 import { useSessionContext } from '@/components/SessionProvider';
 import { useGmailStatus } from '@/hooks/useGmailStatus';
 import { hasActiveSession } from '@/lib/session';
@@ -124,10 +123,9 @@ function LoginContent() {
   if (!sessionLoading && session && hasActiveSession(session)) {
     return (
       <div className="login-page">
-        <VideoBackground />
         <div className="login-content">
           <div className="login-card">
-            <p className="login-footnote">Redirecting to your console…</p>
+            <p className="login-footnote">Redirecting…</p>
           </div>
         </div>
       </div>
@@ -136,7 +134,6 @@ function LoginContent() {
 
   return (
     <div className="login-page">
-      <VideoBackground />
       <div className="login-content">
         <div className="login-card">
           {stage === 'signin' && (
@@ -144,7 +141,7 @@ function LoginContent() {
               <p className="login-kicker">ECLIPSN</p>
               <h1>Connect with your orbit.</h1>
               {errorMessage && (
-                <p style={{ color: '#ff6b6b', marginBottom: '1rem' }}>
+                <p className="text-[var(--text-muted)] mb-4 text-[14px]">
                   {errorMessage}
                 </p>
               )}

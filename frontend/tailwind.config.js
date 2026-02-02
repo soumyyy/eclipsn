@@ -9,11 +9,14 @@ module.exports = {
         extend: {
             colors: {
                 background: "var(--bg)",
-                panel: "var(--panel)",
-                primary: "var(--neon)", // #d7ceb9 (Cream)
-                "primary-soft": "var(--neon-soft)",
+                surface: "var(--surface)",
+                primary: "var(--dutch-white)",
                 muted: "var(--text-muted)",
-                accent: "var(--text-accent)", // bluish typically or just use primary
+                border: "var(--border)",
+            },
+            borderRadius: {
+                DEFAULT: "var(--radius)",
+                lg: "var(--radius-lg)",
             },
         },
     },

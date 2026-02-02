@@ -46,12 +46,12 @@ const RHR_LABELS: Record<string, string> = {
 
 function Chip({ label, variant }: { label: string; variant: 'good' | 'neutral' | 'caution' }) {
     const classes = {
-        good: 'bg-green-500/15 text-green-400 border-green-500/30',
-        neutral: 'bg-white/10 text-white/70 border-white/10',
-        caution: 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+        good: 'bg-[var(--surface)] text-[var(--text)] border-[var(--border-strong)]',
+        neutral: 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]',
+        caution: 'bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border-strong)]'
     };
     return (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${classes[variant]}`}>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-medium border ${classes[variant]}`}>
             {label}
         </span>
     );
@@ -73,18 +73,14 @@ export function VitalsCard({ data }: { data: VitalsCardData }) {
         : null;
 
     return (
-        <div className="relative p-5 rounded-xl bg-gradient-to-br from-primary/5 to-black border border-primary/20 hover:border-primary/40 transition-all duration-300 shadow-lg shadow-black/50 overflow-hidden">
+        <article className="card">
             <div className="space-y-4">
                 <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                    <span className="text-[10px] uppercase tracking-widest text-white/30 font-mono">
+                    <span className="text-[12px] text-[var(--text-muted)]">
                         {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
-                    <h3 className="text-base font-semibold text-white tracking-tight">
-                        {data.title}
-                    </h3>
+                    <h3 className="text-[15px] font-semibold text-[var(--text)]">{data.title}</h3>
                 </div>
-
-                {/* Quick vitals chips */}
                 <div className="flex flex-wrap gap-2">
                     {sleepStr != null && (
                         <Chip
@@ -99,18 +95,15 @@ export function VitalsCard({ data }: { data: VitalsCardData }) {
                         <Chip label={RHR_LABELS[rhrVs] ?? rhrVs} variant={rhrVariant} />
                     )}
                 </div>
-
-                {/* Narrative */}
-                <div className="prose prose-invert prose-sm prose-headings:text-white/90 prose-headings:font-normal prose-p:text-white/70 prose-p:leading-relaxed prose-strong:text-white/90 prose-strong:font-medium prose-li:text-white/70 max-w-none">
+                <div className="prose prose-invert prose-sm max-w-none text-[var(--dutch-white-soft)] prose-p:leading-relaxed prose-strong:text-[var(--text)]">
                     <ReactMarkdown>{data.content}</ReactMarkdown>
                 </div>
-
                 {meta.verdict && (
-                    <p className="text-xs text-primary/80 font-medium border-t border-white/5 pt-3">
+                    <p className="text-[13px] text-[var(--text)] font-medium border-t border-[var(--border)] pt-3">
                         {meta.verdict}
                     </p>
                 )}
             </div>
-        </div>
+        </article>
     );
 }
