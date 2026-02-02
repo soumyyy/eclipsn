@@ -2,8 +2,21 @@ import { config } from '../config';
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import { saveUserIntegration, getUserIntegration } from '../services/db';
+import {
+    fetchWhoopRecovery,
+    fetchWhoopCycle,
+    fetchWhoopSleep,
+    fetchWhoopWorkout,
+    fetchWhoopProfile,
+    fetchWhoopMeasurements,
+    fetchWhoopBaselines
+} from '../services/whoopClient';
 
 const router = Router();
+
+function getWhoopUserId(req: any): string | null {
+    return (req.session as any)?.userId ?? (req as any).userId ?? null;
+}
 
 // ... (omitted lines)
 
@@ -130,7 +143,7 @@ router.get('/callback', async (req, res) => {
 });
 
 router.get('/status', async (req, res) => {
-    const userId = (req.session as any).userId || (req as any).userId;
+    const userId = getWhoopUserId(req);
     if (!userId) return res.status(401).json({ connected: false });
 
     const integration = await getUserIntegration(userId, 'whoop');
@@ -141,7 +154,7 @@ router.get('/status', async (req, res) => {
 });
 
 router.delete('/disconnect', async (req, res) => {
-    const userId = (req.session as any).userId || (req as any).userId;
+    const userId = getWhoopUserId(req);
     if (!userId) return res.status(401).send('Unauthorized');
 
     try {
@@ -155,19 +168,8 @@ router.delete('/disconnect', async (req, res) => {
     }
 });
 
-// Data Endpoints using whoopClient
-import {
-    getValidAccessToken,
-    fetchWhoopRecovery,
-    fetchWhoopCycle,
-    fetchWhoopSleep,
-    fetchWhoopWorkout,
-    fetchWhoopProfile,
-    fetchWhoopMeasurements
-} from '../services/whoopClient';
-
 router.get('/recovery', async (req, res) => {
-    const userId = (req.session as any).userId || (req as any).userId;
+    const userId = getWhoopUserId(req);
     if (!userId) return res.status(401).send('Unauthorized');
     try {
         const data = await fetchWhoopRecovery(userId);
@@ -179,7 +181,7 @@ router.get('/recovery', async (req, res) => {
 });
 
 router.get('/cycles', async (req, res) => {
-    const userId = (req.session as any).userId || (req as any).userId;
+    const userId = getWhoopUserId(req);
     if (!userId) return res.status(401).send('Unauthorized');
     try {
         const data = await fetchWhoopCycle(userId);
@@ -191,7 +193,7 @@ router.get('/cycles', async (req, res) => {
 });
 
 router.get('/sleep', async (req, res) => {
-    const userId = (req.session as any).userId || (req as any).userId;
+    const userId = getWhoopUserId(req);
     if (!userId) return res.status(401).send('Unauthorized');
     try {
         const data = await fetchWhoopSleep(userId);
@@ -203,7 +205,7 @@ router.get('/sleep', async (req, res) => {
 });
 
 router.get('/workout', async (req, res) => {
-    const userId = (req.session as any).userId || (req as any).userId;
+    const userId = getWhoopUserId(req);
     if (!userId) return res.status(401).send('Unauthorized');
     try {
         const data = await fetchWhoopWorkout(userId);
@@ -215,7 +217,7 @@ router.get('/workout', async (req, res) => {
 });
 
 router.get('/profile', async (req, res) => {
-    const userId = (req.session as any).userId || (req as any).userId;
+    const userId = getWhoopUserId(req);
     if (!userId) return res.status(401).send('Unauthorized');
     try {
         const data = await fetchWhoopProfile(userId);
@@ -227,13 +229,28 @@ router.get('/profile', async (req, res) => {
 });
 
 router.get('/measurements', async (req, res) => {
-    const userId = (req.session as any).userId || (req as any).userId;
+    const userId = getWhoopUserId(req);
     if (!userId) return res.status(401).send('Unauthorized');
     try {
         const data = await fetchWhoopMeasurements(userId);
         res.json(data);
     } catch (e: any) {
         console.error('Whoop Measurements Error:', e.message);
+        res.status(500).json({ error: e.message || 'Failed' });
+    }
+});
+
+/** Monthly baselines (avg HRV, RHR, sleep) for vitals comparison. Used by brain for vitals card. */
+router.get('/baselines', async (req, res) => {
+    const userId = getWhoopUserId(req);
+    if (!userId) return res.status(401).send('Unauthorized');
+    const days = Math.min(90, Math.max(7, parseInt(String(req.query.days || 30), 10) || 30));
+    try {
+        const baselines = await fetchWhoopBaselines(userId, days);
+        if (!baselines) return res.status(503).json({ error: 'Could not compute baselines' });
+        res.json(baselines);
+    } catch (e: any) {
+        console.error('Whoop Baselines Error:', e.message);
         res.status(500).json({ error: e.message || 'Failed' });
     }
 });

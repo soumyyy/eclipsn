@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { BespokeMemoryModal } from './BespokeMemoryModal';
 import { ProfileModal } from './ProfileModal';
 import { ModalPortal } from './ModalPortal';
@@ -99,6 +100,9 @@ export function Sidebar() {
         <section>
           <div className='chathistory'>
             <p>History</p>
+            <Link href="/home" className="block mt-2 text-xs text-green-400 hover:text-green-300 underline">
+              Today / Feed
+            </Link>
           </div>
         </section>
         <section className="profile-identity-card">

@@ -5,16 +5,20 @@ interface WhoopData {
         score: number;
         sleep: number;
         hrv: number;
-        state: number; // 0-33 red, 34-66 yellow, 67-100 green
+        rhr?: number | null;
+        spo2?: number | null;
+        skinTempCelsius?: number | null;
+        state: number;
         cycle?: Record<string, unknown>;
         sleep_data?: Record<string, unknown>;
         workout?: Record<string, unknown>;
         profile?: Record<string, unknown>;
+        measurements?: Record<string, unknown>;
     };
 }
 
 export function WhoopCard({ data }: { data: WhoopData }) {
-    const { score, sleep, hrv, cycle, sleep_data, workout, profile } = data.metadata;
+    const { score, sleep, hrv, rhr, spo2, skinTempCelsius, cycle, sleep_data, workout, measurements } = data.metadata;
 
     const getRecoveryColor = (s: number) => {
         if (s >= 67) return '#2ea084'; // Greenish
@@ -39,10 +43,9 @@ export function WhoopCard({ data }: { data: WhoopData }) {
     const sleepHours = totalBedMs != null ? (totalBedMs / 3600000).toFixed(1) : '0.0';
     const sleepEfficiency = sleepScore?.sleep_efficiency_percentage != null ? Math.round(Number(sleepScore.sleep_efficiency_percentage)) : 0;
 
-    const rhr = (profile?.resting_heart_rate ?? profile?.average_heart_rate) != null
-        ? Number(profile?.resting_heart_rate ?? profile?.average_heart_rate)
-        : null;
-    const workoutName = workout?.name ?? workout?.sport_name ?? null;
+    const rhrDisplay = rhr ?? null;
+    const workoutName = workout?.sport_name ?? workout?.name ?? null;
+    const maxHR = measurements?.max_heart_rate != null ? Number(measurements.max_heart_rate) : null;
 
     return (
         <div className="group relative p-5 rounded-xl bg-gradient-to-br from-primary/5 to-black border border-primary/20 hover:border-primary/40 transition-all duration-300 shadow-lg shadow-black/50 overflow-hidden">
@@ -102,10 +105,26 @@ export function WhoopCard({ data }: { data: WhoopData }) {
                 </div>
             </div>
 
-            {/* Footer / HRV */}
-            <div className="mt-4 pt-3 border-t border-white/5 flex justify-between items-center text-xs text-white/40">
+            {/* Last Workout (if available) */}
+            {workoutName && (
+                <div className="mt-3 pt-3 border-t border-white/5 text-[10px] text-white/50">
+                    Last: <span className="text-white/70 capitalize">{String(workoutName)}</span>
+                </div>
+            )}
+
+            {/* Recovery metrics: HRV, RHR (from Whoop recovery API) */}
+            <div className="mt-4 pt-3 border-t border-white/5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/40">
                 <span>HRV: <span className="text-white/70 font-mono">{Math.round(hrv)} ms</span></span>
-                <span>RHR: <span className="text-white/70 font-mono">{data.metadata?.state ? 'N/A' : '48'}</span></span>
+                <span>RHR: <span className="text-white/70 font-mono">{rhrDisplay != null ? rhrDisplay : '—'}</span></span>
+                {spo2 != null && (
+                    <span>SpO2: <span className="text-white/70 font-mono">{Number(spo2).toFixed(1)}%</span></span>
+                )}
+                {skinTempCelsius != null && (
+                    <span>Skin: <span className="text-white/70 font-mono">{Number(skinTempCelsius).toFixed(1)}°C</span></span>
+                )}
+                {maxHR != null && (
+                    <span>Max HR: <span className="text-white/70 font-mono">{maxHR}</span></span>
+                )}
             </div>
         </div>
     );

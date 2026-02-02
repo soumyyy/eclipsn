@@ -1,9 +1,10 @@
 import { BriefingCard } from './cards/BriefingCard';
 import { WhoopCard } from './cards/WhoopCard';
+import { VitalsCard } from './cards/VitalsCard';
 // import { AgendaCard } from './cards/AgendaCard';
 // import { InsightCard } from './cards/InsightCard';
 
-export type FeedCardType = 'briefing' | 'agenda' | 'insight' | 'stat' | 'recovery';
+export type FeedCardType = 'briefing' | 'agenda' | 'insight' | 'stat' | 'recovery' | 'vitals';
 
 export interface FeedCardProps {
     id: string;
@@ -19,6 +20,8 @@ export function FeedCardRegistry({ card }: { card: FeedCardProps }) {
             return <BriefingCard data={card.data} />;
         case 'recovery':
             return <WhoopCard data={card.data} />;
+        case 'vitals':
+            return <VitalsCard data={card.data} />;
         // case 'agenda':
         //   return <AgendaCard data={card.data} />;
         default:

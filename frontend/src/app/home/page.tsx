@@ -1,32 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { get, post } from '@/lib/apiClient';
-import { FeedCardProps } from '@/components/feed/FeedCardRegistry';
+import { usePathname } from 'next/navigation';
+import { post } from '@/lib/apiClient';
+import { useFeed } from '@/contexts/FeedContext';
 import FeedTimeline from '@/components/feed/FeedTimeline';
 
 export default function HomeFeedPage() {
-    const [cards, setCards] = useState<FeedCardProps[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { cards, loading, loadFeed } = useFeed();
+    const pathname = usePathname();
 
     useEffect(() => {
         loadFeed();
-    }, []);
+    }, [loadFeed]);
 
-    async function loadFeed() {
-        try {
-            setLoading(true);
-            const res = await get('feed');
-            if (res.feed) {
-                setCards(res.feed);
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible' && pathname === '/home') {
+                loadFeed();
             }
-        } catch (e) {
-            console.error('Failed to load feed', e);
-        } finally {
-            setLoading(false);
-        }
-    }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => document.removeEventListener('visibilitychange', handleVisibility);
+    }, [loadFeed, pathname]);
 
     async function handleGenerateBriefing() {
         try {
@@ -39,7 +37,6 @@ export default function HomeFeedPage() {
 
     return (
         <div className="flex flex-col h-full overflow-y-auto custom-scrollbar">
-            {/* Header */}
             <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-primary/20 px-6 py-4 flex justify-between items-center">
                 <h1 className="text-xl font-bold text-primary tracking-tight">Today</h1>
                 <div className="flex gap-2">
@@ -58,7 +55,6 @@ export default function HomeFeedPage() {
                 </div>
             </div>
 
-            {/* Feed Stream */}
             <div className="flex-1 p-6 space-y-6 max-w-3xl mx-auto w-full">
                 {loading ? (
                     <div className="animate-pulse space-y-4">
@@ -78,7 +74,6 @@ export default function HomeFeedPage() {
                     </div>
                 )}
 
-                {/* Bottom Spacer */}
                 <div className="h-20" />
             </div>
         </div>

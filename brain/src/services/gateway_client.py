@@ -259,3 +259,23 @@ async def fetch_whoop_measurements(user_id: str) -> dict | None:
     except httpx.HTTPError as exc:
         logger.warning("Whoop measurements fetch failed: %s", exc)
         return None
+
+
+async def fetch_whoop_baselines(user_id: str, days: int = 30) -> dict | None:
+    """Fetch monthly baselines (avg HRV, RHR, sleep) for vitals comparison."""
+    settings = get_settings()
+    url = f"{settings.gateway_url}/api/whoop/baselines"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(
+                url,
+                params={"days": days},
+                headers=_internal_headers(user_id)
+            )
+        if response.status_code in (401, 503):
+            return None
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPError as exc:
+        logger.warning("Whoop baselines fetch failed: %s", exc)
+        return None

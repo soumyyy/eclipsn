@@ -1,22 +1,26 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useGmailStatus } from '@/hooks/useGmailStatus';
 import { useWhoopStatus } from '@/hooks/useWhoopStatus';
+import { useWhoopData } from '@/hooks/useWhoopData';
 import { useSessionContext } from '@/components/SessionProvider';
 import { gatewayFetch } from '@/lib/gatewayFetch';
 import { getAbsoluteApiUrl } from '@/lib/api';
 import { ModalPortal } from '../ModalPortal';
 import { ProfileModal } from '../ProfileModal';
-// import { BespokeMemoryModal } from '../BespokeMemoryModal'; // If needed
 
 export function SidebarNav() {
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     // const [isBespokeOpen, setIsBespokeOpen] = useState(false);
     const [disconnecting, setDisconnecting] = useState(false);
 
+    const pathname = usePathname();
     const { status: gmailStatus, refresh: refreshGmailStatus } = useGmailStatus();
     const { status: whoopStatus } = useWhoopStatus();
+    const { data: whoopData } = useWhoopData(Boolean(whoopStatus?.connected));
     const { refreshSession } = useSessionContext();
 
     const connectUrl = getAbsoluteApiUrl('gmail/connect');
@@ -54,8 +58,20 @@ export function SidebarNav() {
                 </div>
 
                 <nav className="flex flex-col space-y-2">
-                    {['Home', 'Focus', 'Memories', 'Graph'].map(item => (
-                        <button key={item} className="text-left py-2 px-3 rounded hover:bg-green-900/20 text-green-300 hover:text-green-100 transition-colors text-sm font-medium">
+                    <Link
+                        href="/home"
+                        className={`text-left py-2 px-3 rounded hover:bg-green-900/20 text-sm font-medium transition-colors ${pathname === '/home' ? 'bg-green-900/20 text-green-100' : 'text-green-300 hover:text-green-100'}`}
+                    >
+                        Home
+                    </Link>
+                    <Link
+                        href="/"
+                        className={`text-left py-2 px-3 rounded hover:bg-green-900/20 text-sm font-medium transition-colors ${pathname === '/' ? 'bg-green-900/20 text-green-100' : 'text-green-300 hover:text-green-100'}`}
+                    >
+                        Chat
+                    </Link>
+                    {['Focus', 'Memories', 'Graph'].map(item => (
+                        <button key={item} className="text-left py-2 px-3 rounded hover:bg-green-900/20 text-green-300 hover:text-green-100 transition-colors text-sm font-medium opacity-60">
                             {item}
                         </button>
                     ))}
@@ -86,7 +102,9 @@ export function SidebarNav() {
                             <span className="text-green-600">Whoop</span>
                             <span className={`flex items-center gap-1.5 ${whoopStatus?.connected ? 'text-green-400' : 'text-green-700/60'}`}>
                                 {whoopStatus?.connected && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
-                                {whoopStatus?.connected ? '89% Rec' : 'Offline'}
+                                {whoopStatus?.connected
+                                    ? `${whoopData?.metadata?.score ?? '—'}% Rec`
+                                    : 'Offline'}
                             </span>
                         </div>
                     </div>

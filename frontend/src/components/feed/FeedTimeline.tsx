@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { FeedCardProps } from './FeedCardRegistry';
 import { BriefingCard } from './cards/BriefingCard';
+import { VitalsCard } from './cards/VitalsCard';
 
 interface FeedTimelineProps {
     cards: FeedCardProps[];
@@ -32,6 +33,8 @@ const TimelineItem: React.FC<{ card: FeedCardProps; index: number }> = ({ card, 
         switch (card.type) {
             case 'briefing':
                 return <BriefingCard data={card.data} />;
+            case 'vitals':
+                return <VitalsCard data={card.data} />;
             case 'insight':
                 return (
                     <div className="text-white/70 text-sm leading-relaxed">
