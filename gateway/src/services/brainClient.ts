@@ -7,6 +7,7 @@ interface ChatPayload {
   message: string;
   history?: Array<{ role: string; content: string }>;
   profile?: Record<string, unknown> | null;
+  attachments?: Array<{ filename: string; mime_type: string; data_base64: string }>;
 }
 
 export async function sendChat(payload: ChatPayload) {
@@ -15,7 +16,8 @@ export async function sendChat(payload: ChatPayload) {
     conversation_id: payload.conversationId,
     message: payload.message,
     history: payload.history ?? [],
-    profile: payload.profile ?? null
+    profile: payload.profile ?? null,
+    attachments: payload.attachments ?? []
   });
 
   return response.data;

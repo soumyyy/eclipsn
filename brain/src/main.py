@@ -37,7 +37,8 @@ async def chat_endpoint(request: ChatRequest):
             conversation_id=request.conversation_id,
             message=request.message,
             history=request.history,
-            profile=request.profile
+            profile=request.profile,
+            attachments=[a.model_dump() for a in (request.attachments or [])]
         )
         return result
     except Exception as exc:  # pylint: disable=broad-except

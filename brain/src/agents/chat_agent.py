@@ -35,6 +35,8 @@ from ..tools.whoop_tools import (
     get_whoop_body_tool
 )
 from ..services.url_fetch import fetch_url_content
+from ..services import user_memory_store
+from ..services.multimodal_extraction import extract_attachment, build_attachment_context, AttachmentResult
 
 
 class ProfileUpdateInput(BaseModel):
@@ -67,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are Eclipsn, a personal agent for a single user—like a blend of Alfred, Friday, and JARVIS. You are capable, discreet, and genuinely helpful: a buddy who has their back. You know about the user from past conversations and, soon, from their email. Your tone is warm and human, never robotic: concise when it helps, a bit more chatty when they need context. You anticipate needs, offer to help before being asked, and keep what matters to them in mind. Use memories when helpful; call the web_search tool whenever you need up-to-date facts or entertainment news. If the user references anything that may have changed after 2024 (news, entertainment, finance, product releases, etc.), you MUST call web_search before answering.
 
-**Voice and style:** Reply in a refined but friendly way. Prefer short, clear sentences. Use small caps for a polished tone where it fits (e.g. for emphasis or a calm, steady feel). Be the capable friend in the room—helpful, never condescending.
+**Voice and style:** Reply in a refined but friendly way. Prefer short, clear sentences. Write in normal sentence case (capitalize only the first letter of sentences and proper nouns). Do NOT write in ALL CAPS or uppercase—the UI will apply a refined typographic style; you just write in standard mixed case. Be the capable friend in the room—helpful, never condescending.
 
 - **URL / link in the message**: When the user includes a URL or a bare domain (e.g. example.com or https://example.com), the system has already fetched that page's content and appended it to their message under "URL Context". You MUST answer based on that URL Context only. Do NOT call web_search for that link or for the person/site name—the user wants to know what is on that specific page. Summarize or answer using the URL Context text. If the URL Context section is empty or says the fetch failed, then tell the user the page could not be loaded and optionally offer to search the web instead.
 
@@ -419,6 +421,66 @@ async def _auto_save_from_context(user_id: str, content: str) -> Optional[str]:
         return None
 
 
+async def _process_attachments(user_id: str, attachments: List[dict]) -> tuple[str, bool]:
+    results: List[AttachmentResult] = []
+    for attachment in attachments:
+        try:
+            extracted = await extract_attachment(attachment)
+            if extracted:
+                results.append(extracted)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Attachment extraction failed: %s", exc)
+    if not results:
+        return "", False
+
+    any_saved = False
+    for item in results:
+        summary = (item.summary or "").strip()
+        if summary:
+            source_type = "upload_pdf" if item.mime_type == "application/pdf" else "upload_image"
+            try:
+                status = await user_memory_store.upsert_user_memory_from_source(
+                    user_id=user_id,
+                    content=summary,
+                    source_type=source_type,
+                    source_id=item.source_hash,
+                    scope="upload",
+                    confidence=0.8,
+                )
+                if status in ("inserted", "updated"):
+                    any_saved = True
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to save attachment summary: %s", exc)
+
+        for fact in item.user_facts:
+            if not fact:
+                continue
+            try:
+                existing = await user_memory_store.find_user_memory_by_content(
+                    user_id=user_id,
+                    content=fact,
+                    source_type="upload_fact",
+                    scope="upload_fact",
+                )
+                if existing:
+                    continue
+                await user_memory_store.insert_user_memory(
+                    user_id=user_id,
+                    content=fact,
+                    source_type="upload_fact",
+                    source_id=item.source_hash,
+                    scope="upload_fact",
+                    confidence=0.85,
+                    embedding=None,
+                )
+                any_saved = True
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to save attachment user fact: %s", exc)
+
+    context_block = build_attachment_context(results)
+    return context_block, any_saved
+
+
 async def _collect_url_context(message: str, max_urls: int = 3) -> tuple[str, List[SearchSource]]:
     text = message or ""
     raw_urls = list(URL_PATTERN.findall(text))
@@ -454,6 +516,7 @@ async def run_chat_agent(
     message: str,
     history: Optional[List[dict]] = None,
     profile: Optional[Dict] = None,
+    attachments: Optional[List[dict]] = None,
 ) -> ChatResponse:
     _ = conversation_id  # TODO: fetch conversation history for better context.
     llm = await _load_llm()
@@ -466,6 +529,10 @@ async def run_chat_agent(
         )
 
     url_context_block, url_sources = await _collect_url_context(message)
+    attachment_context_block = ""
+    attachments_saved = False
+    if attachments:
+        attachment_context_block, attachments_saved = await _process_attachments(user_id, attachments)
     augmented_message = message
     if url_context_block:
         augmented_message = (
@@ -482,6 +549,12 @@ async def run_chat_agent(
                 "Tell the user the link could not be loaded. Do NOT do a web search and then say 'I couldn't access the website directly but I found...'—that is unhelpful. "
                 "Simply say the page could not be loaded and suggest they try opening it in a browser or try again later.]"
             )
+    if attachment_context_block:
+        augmented_message = (
+            f"{augmented_message}\n\n"
+            "[The user attached files. Use ONLY the Attachment Context below to answer questions about those files.]\n\n"
+            f"Attachment Context:\n{attachment_context_block}"
+        )
 
     # Auto-save when user asks to save: use URL context (same message) or last assistant reply ("save that")
     memories_saved_this_turn = False
@@ -506,6 +579,9 @@ async def run_chat_agent(
                     f"{augmented_message}\n\n"
                     "[You tried to save but the save failed (e.g. embedding unavailable). Tell the user you could not save and suggest trying again or checking settings.]"
                 )
+
+    if attachments_saved:
+        memories_saved_this_turn = True
 
     tools = _build_tools(user_id)
     profile_str = json.dumps(profile, indent=2) if profile else "(no profile info)"

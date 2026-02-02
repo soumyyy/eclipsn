@@ -1,10 +1,23 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { sendChat } from '../services/brainClient';
 import { DEFAULT_CONVERSATION_ID } from '../constants';
 import { ensureConversation, getUserProfile, insertMessage } from '../services/db';
 import { requireUserId } from '../utils/request';
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(null, false);
+    }
+  }
+});
 
 function sanitizeProfile(profile: Record<string, unknown> | null) {
   if (!profile) return null;
@@ -32,14 +45,29 @@ function sanitizeProfile(profile: Record<string, unknown> | null) {
   return cloned;
 }
 
-router.post('/', async (req, res) => {
-  const { message, history } = req.body as {
-    message?: string;
-    history?: Array<{ role: string; content: string }>;
-  };
+router.post('/', upload.array('attachments'), async (req, res) => {
+  const rawMessage = req.body?.message;
+  const message = typeof rawMessage === 'string' ? rawMessage : '';
+  const historyRaw = req.body?.history;
+  let history: Array<{ role: string; content: string }> | undefined;
+  if (Array.isArray(historyRaw)) {
+    history = historyRaw as Array<{ role: string; content: string }>;
+  } else if (typeof historyRaw === 'string' && historyRaw.trim()) {
+    try {
+      history = JSON.parse(historyRaw) as Array<{ role: string; content: string }>;
+    } catch {
+      history = undefined;
+    }
+  }
+  const files = (req.files || []) as Express.Multer.File[];
+  const attachments = files.map((file) => ({
+    filename: file.originalname,
+    mime_type: file.mimetype,
+    data_base64: file.buffer.toString('base64')
+  }));
 
-  if (!message) {
-    return res.status(400).json({ error: 'message is required' });
+  if (!message && attachments.length === 0) {
+    return res.status(400).json({ error: 'message or attachments are required' });
   }
 
   try {
@@ -50,14 +78,15 @@ router.post('/', async (req, res) => {
       userId,
       conversationId: DEFAULT_CONVERSATION_ID,
       role: 'user',
-      text: message
+      text: message || '[Attachment]'
     });
     const response = await sendChat({
       userId,
       conversationId: DEFAULT_CONVERSATION_ID,
-      message,
+      message: message || 'Shared an attachment.',
       history,
-      profile
+      profile,
+      attachments
     });
     if (response?.reply) {
       await insertMessage({
