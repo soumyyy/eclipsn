@@ -57,6 +57,73 @@ async def trigger_memory_index(user_id: str | None = None):
         raise HTTPException(status_code=500, detail=message) from exc
 
 
+class MemoryExtractRequest(BaseModel):
+    user_id: str
+
+
+@app.post('/memory/extract')
+async def trigger_memory_extract(request: MemoryExtractRequest):
+    """Phase 4: Run extraction (Gmail + bespoke → user_memories) for one user. On-demand or cron."""
+    try:
+        from .services.memory_extraction import run_extraction_for_user
+        from .services.extraction_runs import record_extraction_run
+        result = await run_extraction_for_user(request.user_id)
+        await record_extraction_run()
+        return result
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Memory extraction failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get('/memory/extract-last-run')
+async def get_extract_last_run():
+    """Return last memory extraction run time (for gateway 24h check + nightly cron)."""
+    try:
+        from .services.extraction_runs import get_last_extraction_run
+        last = await get_last_extraction_run()
+        return {"last_run_at": last.isoformat() if last else None}
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Get extract last run failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# Phase 5: User memories list/search and delete for Memory UI (gateway proxies with user_id)
+@app.get('/memory/user-memories')
+async def list_or_search_user_memories(
+    user_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    q: str | None = None,
+):
+    """List user_memories (paginated) or semantic search when q is provided. Used by gateway GET /api/memories."""
+    from .services import user_memory_store
+    try:
+        if q and q.strip():
+            rows = await user_memory_store.search_user_memories_by_query(user_id, q.strip(), limit=limit)
+            return {"memories": rows, "total": len(rows)}
+        rows = await user_memory_store.list_user_memories(user_id, limit=limit, offset=offset)
+        return {"memories": rows}
+    except Exception as exc:  # pragma: no cover
+        logger.exception("List/search user memories failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.delete('/memory/user-memories/{memory_id}')
+async def delete_user_memory_endpoint(memory_id: str, user_id: str):
+    """Soft-delete one user_memory. Used by gateway DELETE /api/memories/:id."""
+    from .services import user_memory_store
+    try:
+        ok = await user_memory_store.delete_user_memory(memory_id, user_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Memory not found or already deleted")
+        return {"status": "deleted"}
+    except HTTPException:
+        raise
+    except Exception as exc:  # pragma: no cover
+        logger.exception("Delete user memory failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 class ScheduleIngestRequest(BaseModel):
     user_id: str
     file_data: str # base64

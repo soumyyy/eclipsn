@@ -225,27 +225,30 @@ class InternalGatewayClient:
             raise e
     
     async def update_profile(
-        self, 
-        user_id: str, 
+        self,
+        user_id: str,
         field: Optional[str] = None,
         value: Optional[str] = None,
-        note: Optional[str] = None
+        note: Optional[str] = None,
+        remove_note: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update user profile in Gateway."""
         
         # Validate input
-        if not field and not note:
-            raise ValueError("Either field or note must be provided")
+        if not field and not note and not remove_note:
+            raise ValueError("Provide field+value, note, or remove_note")
         
         if field and value is None:
             raise ValueError("Value must be provided when field is specified")
         
-        request_data = {}
+        request_data: Dict[str, Any] = {}
         if field:
             request_data["field"] = field
             request_data["value"] = value
         if note:
             request_data["note"] = note
+        if remove_note:
+            request_data["remove_note"] = remove_note
         
         response = await self._make_request(
             "POST", 
@@ -268,6 +271,21 @@ class InternalGatewayClient:
             return response.get("data", {})
         
         raise InternalAPIError("Failed to get profile status")
+
+    async def get_gmail_thread_summaries(
+        self, user_id: str, limit: int = 500
+    ) -> list[Dict[str, Any]]:
+        """List Gmail thread summaries for extraction (Phase 4). Returns list of {id, threadId, subject, summary, sender}."""
+        response = await self._make_request(
+            "GET",
+            f"/internal/gmail/threads/{user_id}",
+            user_id=user_id,
+            params={"limit": limit},
+        )
+        if not response.get("success"):
+            raise InternalAPIError("Failed to list Gmail threads")
+        data = response.get("data") or {}
+        return data.get("threads") or []
     
     # Connection Management
     async def close(self):

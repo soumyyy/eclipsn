@@ -13,10 +13,14 @@ from ..config import get_settings
 from ..models.schemas import ChatResponse, SearchSource
 from ..tools import (
     search_memories_tool,
+    create_memory_tool,
+    forget_memory_tool,
+    get_context_with_budget,
     web_search_tool,
     gmail_search_tool,
     gmail_semantic_search_tool,
     profile_update_tool,
+    profile_remove_note_tool,
     gmail_get_thread_tool,
     search_secondary_emails_tool,
     gmail_read_attachment_tool,
@@ -73,13 +77,19 @@ Formatting rules:
     - Do not present stale data as "current" without qualification.
 - Do NOT embed raw URLs or inline citations inside your main response. Rely on the UI to show sources separately.
 - When referencing outside data, mention the publication/source name in plain text (e.g., "According to Indian Express..."), but leave actual links for the UI to display.
-- Use memory_lookup when the user asks about their notes, journals, uploaded documents, or anything they may have saved in their Index (bespoke memory). This searches their uploaded markdown/files and Gmail; call it with a short query (e.g. "colleges", "application deadlines") to retrieve relevant context before answering.
+- When the user shares a personal fact (e.g. "my mother is Namrata", "I'm from Boston") or says "remember X", store it with memory_save so they can recall and forget it later. Use memory_save for facts; use profile_update only for structured fields (name, timezone) or short scratch notes.
+- **Memory tools (choose the right one):**
+  - memory_context: Use when the user asks a very broad question (e.g. "what do you know about me?", "summarize my context", "run the whole context"). Returns a single context blob (user_memories + profile + bespoke + Gmail) trimmed to a token budget so you can answer without blowing the window. Pass a short query (e.g. "me", "overview") and optionally max_tokens (default 2000).
+  - memory_lookup: Use for targeted recall—"what do you know about X?" (e.g. mother, colleges). Returns [id: <id>] per item so the user can say "forget that" and you call memory_forget(id). Use when the question is about a specific topic, not "everything".
+  - gmail_semantic_search: Use when the user explicitly asks about email, Gmail, or a specific sender/topic in mail. Do not use for general "what do you remember?"—use memory_lookup or memory_context instead.
+- When the user says "forget that", "delete that", "delete that info", or "remove that": (1) Call memory_lookup with the topic (e.g. "mother"). (2) From the results, pick the id that matches what they want to forget (the first relevant line: [id: <id>] ...). (3) Call memory_forget with that id—it works for both UUIDs and profile:0, profile:1, etc. Do NOT tell the user you cannot delete notes or that something is "in a note"; just call memory_lookup then memory_forget with the id from the results.
 - Use the gmail_inbox tool whenever the user asks about recent emails, Gmail, inbox activity, or "what's new" in their mail. If gmail_inbox returns no threads, acknowledge that no recent items were found and suggest being more specific instead of simply saying nothing happened.
 - Use gmail_semantic_search when the user asks about a specific topic, sender, or historical email so you can retrieve the closest matches from their Gmail history.
 - If the user asks about the *contents* or *details* of a specific email, you must first find the thread using `gmail_search` (or `gmail_inbox`), and THEN call `gmail_get_thread_tool` with the thread ID to read the full body before answering.
 - If the user asks about "college", "school", "secondary", or "service account" *emails* (e.g. mail from a college inbox), use `search_secondary_emails` with a query (e.g. "colleges", "admissions"). Do NOT use `gmail_inbox` for service account mail unless the user asks for "all my email". If results show "(ID: ..., Account: ...)", use `service_account_get_thread` with account_id|thread_id to read the full body.
 - To read an attachment from a Service Account email, use `service_account_read_attachment`.
 - When the user shares personal preferences or profile details, call profile_update to store them. Provide JSON with "field" and "value" if it maps to a known field, or "note" for free-form info.
+- When the user asks to add a task, todo, or reminder, call create_task with the task description (e.g. "Reply to client", "Buy milk"). Tasks are stored without a separate table and can be listed in the app.
 - Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary.
 - **WHOOP / HEALTH**: You have access to detailed Whoop data via `whoop_recovery`, `whoop_sleep`, `whoop_workout`, `whoop_cycle`, and `whoop_body`. If the user mentions health, fitness, energy, or workouts, check the relevant tool(s).
     - If recovery < 33 (Red): Be a compassionate coach. Suggest rest.
@@ -107,7 +117,7 @@ async def _memory_tool_output(user_id: str, query: str) -> str:
     memories = await search_memories_tool(user_id=user_id, query=query)
     if not memories:
         return "No stored memories matched."
-    return "\n".join(f"- {m.content}" for m in memories)
+    return "\n".join(f"- [id: {m.id}] {m.content}" for m in memories)
 
 
 async def _web_tool_output(query: str) -> str:
@@ -129,6 +139,16 @@ def _build_tools(user_id: str) -> List[Tool]:
     async def memory_coro(q: str) -> str:
         return await _memory_tool_output(user_id, q)
 
+    async def forget_coro(memory_id: str) -> str:
+        return await forget_memory_tool(user_id=user_id, memory_id=memory_id)
+
+    async def memory_save_coro(content: str) -> str:
+        m = await create_memory_tool(user_id=user_id, content=content.strip(), source="chat")
+        return f"Stored: [id: {m.id}] {m.content}"
+
+    async def memory_context_coro(query: str, max_tokens: int = 2000) -> str:
+        return await get_context_with_budget(user_id, (query or "overview").strip(), max_tokens=max_tokens)
+
     async def web_coro(q: str) -> str:
         return await _web_tool_output(q)
 
@@ -145,6 +165,17 @@ def _build_tools(user_id: str) -> List[Tool]:
 
     async def profile_coro(field: str | None = None, value: str | None = None, note: str | None = None) -> str:
         return await profile_update_tool(field=field, value=value, note=note, user_id=user_id)
+
+    async def profile_remove_note_coro(text: str) -> str:
+        return await profile_remove_note_tool(user_id=user_id, text_or_topic=text.strip())
+
+    async def create_task_coro(description: str) -> str:
+        from ..services import task_cards
+        desc = (description or "").strip()
+        if not desc:
+            return "Error: task description is required."
+        task_id = await task_cards.create_task_card(user_id, desc, source="chat")
+        return f"Task created: [id: {task_id}] {desc}"
 
     async def secondary_email_coro(q: str) -> str:
         return await search_secondary_emails_tool(user_id=user_id, query=q)
@@ -197,7 +228,25 @@ def _build_tools(user_id: str) -> List[Tool]:
             name="memory_lookup",
             func=lambda q: "Memory lookup available only in async mode.",
             coroutine=memory_coro,
-            description="Search the user's Index (uploaded notes, journals, markdown) and Gmail for relevant context. Use when they ask about colleges, applications, notes, or anything they may have saved. Pass a short search query (e.g. 'colleges', 'deadlines')."
+            description="Search the user's Index (uploaded notes, journals, markdown) and Gmail for relevant context. Use when they ask about colleges, applications, notes, or anything they may have saved. Pass a short search query (e.g. 'colleges', 'deadlines'). Results include [id: <id>] per item; use that id with memory_forget if the user asks to forget a stored memory."
+        ),
+        Tool(
+            name="memory_save",
+            func=lambda c: "Memory save available only in async mode.",
+            coroutine=memory_save_coro,
+            description="Store a fact or note in the user's memories so they can recall it later and optionally forget it. Use when the user says 'remember X', 'my X is Y', or shares a personal fact (e.g. 'my mother is Namrata'). Pass the content to store as a single string. This allows memory_forget to remove it later if they ask."
+        ),
+        Tool(
+            name="memory_forget",
+            func=lambda mid: "Memory forget available only in async mode.",
+            coroutine=forget_coro,
+            description="Forget (remove) one item by id. Use when the user says 'forget that' or 'delete that'. Always call memory_lookup(topic) first, then pass the id from the matching result: UUID (stored memory) or profile:0, profile:1, ... (profile note). Do not say you cannot delete notes—this tool removes both. gmail:... and bespoke:... ids cannot be forgotten."
+        ),
+        Tool(
+            name="memory_context",
+            func=lambda q: "Memory context available only in async mode.",
+            coroutine=lambda q: memory_context_coro(q, 2000),
+            description="Get a single context blob (user_memories + profile + bespoke + Gmail) for broad questions. Use when the user asks 'what do you know about me?', 'summarize my context', or 'run the whole context'. Pass a short query (e.g. 'me', 'overview'). Result is trimmed to a token budget so you can answer without blowing the window."
         ),
         Tool(
             name="gmail_thread_detail",
@@ -230,6 +279,18 @@ def _build_tools(user_id: str) -> List[Tool]:
             coroutine=profile_coro,
             args_schema=ProfileUpdateInput,
             description="Update the user's profile with a structured argument object containing either field/value or a free-form note."
+        ),
+        Tool(
+            name="profile_remove_note",
+            func=lambda t: "Profile remove note available only in async mode.",
+            coroutine=profile_remove_note_coro,
+            description="Remove the first profile note whose text contains the given topic or phrase. Use when the user says 'forget that' and memory_lookup returned no UUID (the fact was in their profile). Pass a short topic (e.g. 'mother', 'Namrata')."
+        ),
+        Tool(
+            name="create_task",
+            func=lambda d: "Create task available only in async mode.",
+            coroutine=create_task_coro,
+            description="Create a task or todo for the user. Use when they say 'add a task', 'create a todo', 'remind me to X', or 'I need to do X'. Pass the task description as a single string (e.g. 'Reply to client', 'Buy groceries'). Tasks are stored and can be listed via the app."
         ),
         Tool(
             name="search_secondary_emails",

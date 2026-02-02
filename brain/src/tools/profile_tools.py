@@ -77,6 +77,35 @@ async def profile_update_tool(
         return "Profile update failed due to an unexpected error. Please try again."
 
 
+async def profile_remove_note_tool(user_id: Optional[str], text_or_topic: str) -> str:
+    """
+    Remove the first profile note whose text contains the given string.
+    Use when the user says 'forget that' and the fact was in their profile (no memory id from memory_lookup).
+    Pass a short topic or phrase (e.g. 'mother', 'Namrata') to match the note to remove.
+    """
+    if not user_id:
+        logger.error("[ProfileTool] Profile remove_note attempted without user_id")
+        return "Error: User ID required."
+    text = (text_or_topic or "").strip()
+    if not text:
+        return "Please provide the topic or text to remove (e.g. 'mother', 'Namrata')."
+    try:
+        client = await get_internal_client()
+        result = await client.update_profile(user_id=user_id, remove_note=text)
+        if not result.get("success"):
+            return result.get("error", "Failed to remove note.")
+        changes = result.get("changes", [])
+        if changes and "Removed" in str(changes):
+            return "That information has been removed from your profile."
+        return "No matching note was found in your profile; it may already have been removed."
+    except InternalAPIError as e:
+        logger.warning("[ProfileTool] remove_note API error for user %s: %s", user_id, e)
+        return f"Could not remove note: {e.response_data.get('error', 'Service error')}"
+    except Exception as e:
+        logger.error("[ProfileTool] remove_note error for user %s: %s", user_id, e)
+        return "Failed to remove that from your profile. Please try again."
+
+
 async def get_profile_tool(user_id: Optional[str] = None) -> str:
     """
     Get user profile information via Gateway internal API.

@@ -98,6 +98,18 @@ async def search_user_memories(
     ]
 
 
+async def search_user_memories_by_query(
+    user_id: str,
+    query_text: str,
+    limit: int = 20,
+) -> List[dict]:
+    """Semantic search using query text (embeds then searches). Returns same shape as search_user_memories."""
+    embedding = await _embed_text(query_text.strip())
+    if not embedding:
+        return []
+    return await search_user_memories(user_id, embedding, limit=limit)
+
+
 async def list_user_memories(
     user_id: str,
     limit: int = 20,
@@ -125,6 +137,25 @@ async def list_user_memories(
         }
         for r in rows
     ]
+
+
+async def exists_user_memory_for_source(
+    user_id: str,
+    source_type: str,
+    source_id: Optional[str],
+) -> bool:
+    """True if at least one non-deleted user_memory exists for this (user_id, source_type, source_id)."""
+    if source_id is None:
+        return False
+    pool = await get_pool()
+    query = """
+        SELECT 1 FROM user_memories
+        WHERE user_id = $1 AND source_type = $2 AND source_id = $3 AND deleted_at IS NULL
+        LIMIT 1
+    """
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(query, user_id, source_type, source_id)
+    return row is not None
 
 
 async def delete_user_memory(memory_id: str, user_id: str) -> bool:
