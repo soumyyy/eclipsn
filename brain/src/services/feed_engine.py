@@ -8,6 +8,7 @@ from langchain.schema import SystemMessage, HumanMessage
 
 from src.services.database import get_pool
 from src.services import gateway_client
+from src.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -94,37 +95,40 @@ class FeedEngine:
         except Exception as e:
             logger.error(f"Failed to fetch whoop: {e}")
             whoop_data = None
+
+        raw_threads = threads.get('threads', [])
         
-        # 2. Synthesize with LLM
-        try:
-            logger.info("Initializing LLM...")
-            llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        # 2. Synthesize with LLM (skip if OPENAI_API_KEY not set – avoids 500)
+        settings = get_settings()
+        briefing_content = None
+        if settings.openai_api_key and (getattr(settings, "enable_openai", True) or settings.openai_api_key.strip()):
+            try:
+                logger.info("Initializing LLM...")
+                llm = ChatOpenAI(model="gpt-4o", temperature=0, api_key=settings.openai_api_key)
 
-            # Format Events
-            event_lines = []
-            for e in events[:5]:
-                start = self._format_time(e.get('start'))
-                event_lines.append(f"- {start}: {e.get('summary')}")
-            event_text = "\n".join(event_lines) if event_lines else "No scheduled events."
+                # Format Events
+                event_lines = []
+                for e in events[:5]:
+                    start = self._format_time(e.get('start'))
+                    event_lines.append(f"- {start}: {e.get('summary')}")
+                event_text = "\n".join(event_lines) if event_lines else "No scheduled events."
 
-            # Format Emails
-            email_lines = []
-            raw_threads = threads.get('threads', [])
-            for t in raw_threads:
-                sender = t.get('sender', 'Unknown')
-                subj = t.get('subject', '(No Subject)')
-                snip = t.get('snippet', '')
-                email_lines.append(f"From: {sender} | Subj: {subj} | Body: {snip}")
-            
-            email_text = "\n".join(email_lines) if email_lines else "No recent emails."
+                # Format Emails
+                email_lines = []
+                for t in raw_threads:
+                    sender = t.get('sender', 'Unknown')
+                    subj = t.get('subject', '(No Subject)')
+                    snip = t.get('snippet', '')
+                    email_lines.append(f"From: {sender} | Subj: {subj} | Body: {snip}")
+                email_text = "\n".join(email_lines) if email_lines else "No recent emails."
 
-            # Whoop Context
-            recovery_text = "No recovery data."
-            if whoop_data:
-                score = whoop_data.get('score', {}).get('recovery_score', 0)
-                recovery_text = f"Recovery Score: {score}%"
+                # Whoop Context
+                recovery_text = "No recovery data."
+                if whoop_data:
+                    score = whoop_data.get('score', {}).get('recovery_score', 0)
+                    recovery_text = f"Recovery Score: {score}%"
 
-            prompt = f"""
+                prompt = f"""
             You are a Chief of Staff for a busy executive.
             Generate a 'Morning Briefing' markdown summary based on the following context.
             
@@ -148,14 +152,20 @@ class FeedEngine:
             3. **Format**: Use Markdown. Bold key terms. Use bullet points.
             """
 
-            logger.info("Invoking LLM for briefing...")
-            response = await llm.ainvoke([SystemMessage(content="You are a helpful executive assistant."), HumanMessage(content=prompt)])
-            briefing_content = response.content
-            logger.info("LLM generation successful")
-
-        except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
-            briefing_content = "Failed to generate AI briefing. Please try again."
+                logger.info("Invoking LLM for briefing...")
+                response = await llm.ainvoke([SystemMessage(content="You are a helpful executive assistant."), HumanMessage(content=prompt)])
+                briefing_content = response.content
+                logger.info("LLM generation successful")
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                briefing_content = "Failed to generate AI briefing. Please try again."
+        else:
+            # No API key or disabled – save a short fallback so Regenerate Briefing doesn’t 500
+            briefing_content = (
+                "**Agenda:** Set `OPENAI_API_KEY` in your Brain `.env` (or project root) and restart the Brain service to generate your AI briefing.\n\n"
+                "**Inbox / Health:** Once the key is set, your calendar, emails, and Whoop data will be summarized here."
+            )
+            logger.info("Skipping LLM – OPENAI_API_KEY not set; saving fallback briefing.")
 
         # Briefing Card
         await self._save_card(FeedCard(

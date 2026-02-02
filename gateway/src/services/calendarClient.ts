@@ -60,8 +60,12 @@ export async function fetchAllCalendarEvents(
                     });
                 }
             });
-        } catch (err) {
-            console.warn(`[Calendar] Failed to fetch primary events for ${userId}`, err);
+        } catch (err: any) {
+            if (err?.response?.data?.error === 'invalid_grant') {
+                console.warn(`[Calendar] Token expired or revoked for primary account. Reconnect in Settings.`);
+            } else {
+                console.warn(`[Calendar] Failed to fetch primary events for ${userId}`, err?.message ?? err);
+            }
         }
     }
 
@@ -93,8 +97,12 @@ export async function fetchAllCalendarEvents(
                             });
                         }
                     });
-                } catch (err) {
-                    console.warn(`[Calendar] Failed to fetch events for service account ${account.email}`, err);
+                } catch (err: any) {
+                    if (err?.response?.data?.error === 'invalid_grant') {
+                        console.warn(`[Calendar] Token expired or revoked for ${account.email}. Reconnect in Settings.`);
+                    } else {
+                        console.warn(`[Calendar] Failed to fetch events for service account ${account.email}`, err?.message ?? err);
+                    }
                 }
             }
         }
