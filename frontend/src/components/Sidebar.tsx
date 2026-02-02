@@ -103,6 +103,9 @@ export function Sidebar() {
             <Link href="/home" className="block mt-2 text-xs text-green-400 hover:text-green-300 underline">
               Today / Feed
             </Link>
+            <Link href="/settings/memories" className="block mt-2 text-xs text-green-400 hover:text-green-300 underline">
+              Memories
+            </Link>
           </div>
         </section>
         <section className="profile-identity-card">

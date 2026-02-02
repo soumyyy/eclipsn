@@ -193,7 +193,7 @@ export async function deleteUserAccount(userId: string): Promise<void> {
       [userId]
     );
     await client.query(`DELETE FROM conversations WHERE user_id = $1`, [userId]);
-    await client.query(`DELETE FROM tasks WHERE user_id = $1`, [userId]);
+    await client.query(`DELETE FROM feed_cards WHERE user_id = $1 AND type = 'task'`, [userId]);
     await client.query(`DELETE FROM memory_ingestions WHERE user_id = $1`, [userId]);
     await client.query(`DELETE FROM user_profiles WHERE user_id = $1`, [userId]);
     await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
@@ -323,6 +323,17 @@ export async function listUsersWithGmailTokens(): Promise<string[]> {
   }
 }
 
+/** All user IDs (for scheduled memory extraction) */
+export async function listAllUserIds(): Promise<string[]> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query('SELECT id FROM users');
+    return result.rows.map((row) => row.id as string);
+  } finally {
+    client.release();
+  }
+}
+
 export async function upsertGmailThreadBody(params: {
   userId: string;
   threadRowId: string;
@@ -396,6 +407,40 @@ export async function getGmailThreadMetadataByGmailId(userId: string, gmailThrea
     );
     if (result.rowCount === 0) return null;
     return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+/** List thread summaries for extraction (e.g. Phase 4 memory pipeline). Ordered by last_message_at desc. */
+export async function listGmailThreadSummaries(userId: string, limit: number): Promise<Array<{
+  id: string;
+  threadId: string;
+  subject: string | null;
+  summary: string | null;
+  sender: string | null;
+}>> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT id,
+              thread_id as "threadId",
+              subject,
+              summary,
+              sender
+       FROM gmail_threads
+       WHERE user_id = $1
+       ORDER BY last_message_at DESC NULLS LAST
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows as Array<{
+      id: string;
+      threadId: string;
+      subject: string | null;
+      summary: string | null;
+      sender: string | null;
+    }>;
   } finally {
     client.release();
   }
@@ -2025,6 +2070,59 @@ export async function listUsersWithWhoopIntegration(): Promise<string[]> {
       `SELECT DISTINCT user_id FROM user_integrations WHERE provider = 'whoop'`
     );
     return result.rows.map(r => r.user_id);
+  } finally {
+    client.release();
+  }
+}
+
+/** Task cards: feed_cards with type='task'; data = { description, due_date?, status?, source?, thread_id? } */
+export interface TaskCardData {
+  description: string;
+  due_date?: string | null;
+  status?: string;
+  source?: string;
+  thread_id?: string | null;
+}
+
+export async function listTaskCards(userId: string, limit = 50): Promise<Array<{ id: string; data: TaskCardData; status: string; created_at: Date }>> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT id, data, status, created_at
+       FROM feed_cards
+       WHERE user_id = $1 AND type = 'task'
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      data: row.data && typeof row.data === 'object' ? row.data : { description: '', status: 'open' },
+      status: row.status ?? 'active',
+      created_at: row.created_at
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+export async function createTaskCard(userId: string, data: TaskCardData): Promise<string> {
+  const client = await pool.connect();
+  try {
+    const payload = {
+      description: data.description || '',
+      due_date: data.due_date ?? null,
+      status: data.status ?? 'open',
+      source: data.source ?? 'chat',
+      thread_id: data.thread_id ?? null
+    };
+    const result = await client.query(
+      `INSERT INTO feed_cards (user_id, type, priority_score, data, status)
+       VALUES ($1, 'task', 0, $2::jsonb, 'active')
+       RETURNING id`,
+      [userId, JSON.stringify(payload)]
+    );
+    return result.rows[0].id as string;
   } finally {
     client.release();
   }

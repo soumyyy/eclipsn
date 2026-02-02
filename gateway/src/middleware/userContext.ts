@@ -19,7 +19,9 @@ const SKIP_PATH_PREFIXES = [
 const PROTECTED_PATHS = [
   '/api/chat',
   '/api/profile',
-  '/api/memory', 
+  '/api/memory',
+  '/api/memories',
+  '/api/tasks',
   '/api/graph',
   '/api/gmail/threads',
   '/api/gmail/disconnect',

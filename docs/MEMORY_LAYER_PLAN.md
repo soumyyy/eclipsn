@@ -204,3 +204,37 @@ This gives you the exact plan and order; Phase 1 is “memory store + recall” 
 **Other accounts (service accounts):** Synced separately (e.g. `serviceAccountSync`). Intended order per account: **sent** (e.g. last 1y) first, then **inbox**. Today service-account sync is PDF/attachment-focused; extending it to follow sent → inbox for memory/learning is a follow-up.
 
 **Learning:** “Learn” = Phase 4 extraction (Gmail + bespoke → candidates → score → insert into `user_memories`). Sync order only affects *which* mail is available first; extraction can run after sync (batch or on-demand).
+
+---
+
+## 7. Unified recall & forget (one place from the user's perspective)
+
+**Do we need two places (memories vs notes)?**  
+We keep two stores under the hood, but the **user sees one flow**: "what do you know?" and "forget that" work the same whether the fact lives in stored memories or in profile notes.
+
+**Where things live:**
+
+| Store | Used for | Forget by |
+|-------|----------|-----------|
+| **user_memories** | Facts saved with "remember this" / memory_save; semantic recall. | `memory_forget(<uuid>)` |
+| **Profile notes** | Facts the user shared that were stored as a note (e.g. via profile_update in the past). | `memory_forget(profile:0)` etc. |
+| **Bespoke / Gmail** | Index uploads, Gmail threads. Shown in recall but not forgettable by id. | — |
+
+**Unified behavior:**
+
+1. **Recall:** `memory_lookup(query)` returns one merged list from: user_memories (semantic), **profile notes** (filtered by query), bespoke (FAISS), Gmail (semantic). Each item has a stable id: UUID, `profile:0`, `profile:1`, …, `gmail:…`, `bespoke:…`.
+2. **Forget:** `memory_forget(id)` accepts: **UUID** → soft-delete in user_memories; **profile:N** → remove that profile note; `gmail:…` / `bespoke:…` → tool says those cannot be forgotten.
+3. **Agent rule:** For "forget that", the agent always calls `memory_lookup(topic)` then `memory_forget(id)` with the id from the relevant result. It must not say "I cannot delete notes"; it uses the same tool for both memories and profile notes.
+
+**Going forward:** Prefer **memory_save** for any fact the user wants to recall or forget later. Profile notes remain for backward compatibility; both are shown in memory_lookup and forgettable via memory_forget(profile:N).
+
+---
+
+## 8. Phase 3 & 4 implemented
+
+- **Phase 3 (Gmail sent):** Initial sync runs sent (1y) then inbox (1y); embeddings are created inside `fetchRecentThreads` for every batch (sent and inbox). No extra work needed.
+- **Phase 4 (Extraction + confidence):**
+  - **Gateway:** `listGmailThreadSummaries(userId, limit)` in db; `GET /internal/gmail/threads/:userId?limit=500` (internal auth) for brain to fetch thread summaries.
+  - **Brain:** `memory_extraction.py`: `_fetch_gmail_candidates` (via internal client), `_fetch_bespoke_candidates` (from `memory_chunks`), `run_extraction_for_user(user_id, gmail_limit=500, bespoke_limit=200)`. Confidence: Gmail 0.7, bespoke 0.75; threshold 0.7. Skips if `exists_user_memory_for_source` already.
+  - **Backfill:** `brain/src/jobs/memory_extraction_backfill.py` — `poetry run python -m src.jobs.memory_extraction_backfill --user-id <uuid>` or `--all`.
+  - **On-demand:** `POST /api/memory/extract` (body: `{ "user_id": "..." }`) on the brain.

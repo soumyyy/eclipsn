@@ -33,10 +33,7 @@ function getWhoopUserId(req: any): string | null {
 const CLIENT_ID = config.whoopClientId;
 const CLIENT_SECRET = config.whoopClientSecret;
 
-// We need to know the ngrok URL to construct the redirect_uri dynamically or assume it's set in env.
-// For robust local dev, we might ask the user to set NGROK_URL in .env
-const NGROK_URL = process.env.NGROK_URL || 'http://localhost:4000';
-const REDIRECT_URI = `${NGROK_URL}/api/whoop/callback`;
+const REDIRECT_URI = config.whoopRedirectUri;
 
 router.get('/connect', (req, res) => {
     const { userId } = req.session as any;

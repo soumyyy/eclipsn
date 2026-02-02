@@ -80,9 +80,15 @@ export const config = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || '',
 
-  // Whoop OAuth configuration
+  // Whoop OAuth configuration (redirect_uri must match exactly what is whitelisted in Whoop Dev Dashboard)
   whoopClientId: process.env.WHOOP_CLIENT_ID || '',
   whoopClientSecret: process.env.WHOOP_CLIENT_SECRET || '',
+  whoopRedirectUri: (() => {
+    const explicit = (process.env.WHOOP_REDIRECT_URI || '').trim().replace(/\/$/, '');
+    if (explicit) return explicit;
+    const base = (process.env.NGROK_URL || '').trim().replace(/\/$/, '');
+    return base ? `${base}/api/whoop/callback` : 'http://localhost:4000/api/whoop/callback';
+  })(),
 
   // Environment flags
   isProduction,

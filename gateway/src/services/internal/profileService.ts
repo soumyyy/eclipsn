@@ -133,14 +133,15 @@ export class InternalProfileService {
   private async validateUpdateRequest(request: ProfileUpdateRequest): Promise<ProfileValidationError[]> {
     const errors: ProfileValidationError[] = [];
 
-    // Check that either field+value or note is provided
+    // Check that either field+value, note, or remove_note is provided
     const hasFieldValue = request.field && request.value !== undefined;
     const hasNote = request.note && request.note.trim().length > 0;
+    const hasRemoveNote = request.remove_note && request.remove_note.trim().length > 0;
 
-    if (!hasFieldValue && !hasNote) {
+    if (!hasFieldValue && !hasNote && !hasRemoveNote) {
       errors.push({
         field: 'request',
-        message: 'Either field+value or note must be provided',
+        message: 'Either field+value, note, or remove_note must be provided',
         code: 'MISSING_DATA'
       });
       return errors;
@@ -297,7 +298,30 @@ export class InternalProfileService {
       }
     }
 
+    // Handle note removal (e.g. "forget that" when the fact was in profile notes)
+    if (request.remove_note) {
+      const customData = this.buildRemoveNoteUpdate(request, existingProfile);
+      if (customData) {
+        payload.customData = customData;
+      }
+    }
+
     return payload;
+  }
+
+  /**
+   * Build customData with the first note whose text contains remove_note removed.
+   */
+  private buildRemoveNoteUpdate(request: ProfileUpdateRequest, existingProfile: any): ProfileCustomData | null {
+    const existingCustom = existingProfile?.customData || {};
+    const customData: ProfileCustomData = { ...existingCustom };
+    const existingNotes = normalizeProfileNotes(customData.notes || []);
+    const search = (request.remove_note || '').trim().toLowerCase();
+    if (!search) return null;
+    const idx = existingNotes.findIndex(n => (n?.text ?? '').toLowerCase().includes(search));
+    if (idx === -1) return null;
+    customData.notes = existingNotes.filter((_, i) => i !== idx);
+    return customData;
   }
 
   /**
@@ -360,6 +384,10 @@ export class InternalProfileService {
    */
   private detectChanges(request: ProfileUpdateRequest, existingProfile: any): string[] {
     const changes: string[] = [];
+
+    if (request.remove_note) {
+      changes.push(`Removed note containing: "${request.remove_note.substring(0, 50)}${request.remove_note.length > 50 ? '...' : ''}"`);
+    }
 
     if (request.field && request.value !== undefined) {
       const normalizedField = this.normalizeFieldName(request.field);

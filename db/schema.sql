@@ -94,18 +94,7 @@ CREATE TABLE IF NOT EXISTS gmail_thread_bodies (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_gmail_thread_bodies_thread ON gmail_thread_bodies(thread_id);
 
-CREATE TABLE IF NOT EXISTS tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id),
-    source TEXT NOT NULL,
-    description TEXT NOT NULL,
-    thread_id TEXT,
-    due_date TIMESTAMPTZ,
-    status TEXT NOT NULL DEFAULT 'open',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_thread_id ON tasks(thread_id);
+-- Tasks are feed_cards with type='task'; data = { description, due_date?, status?, source?, thread_id? }
 
 CREATE TABLE IF NOT EXISTS memory_ingestions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -174,3 +163,10 @@ CREATE TABLE IF NOT EXISTS feed_cards (
 );
 CREATE INDEX IF NOT EXISTS idx_feed_cards_user_id ON feed_cards(user_id);
 CREATE INDEX IF NOT EXISTS idx_feed_cards_user_type_status ON feed_cards(user_id, type, status);
+
+-- Scheduled memory extraction: last run time (24h check + nightly cron)
+CREATE TABLE IF NOT EXISTS memory_extraction_runs (
+    id SERIAL PRIMARY KEY,
+    ran_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_memory_extraction_runs_ran_at ON memory_extraction_runs(ran_at DESC);

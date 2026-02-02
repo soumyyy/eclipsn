@@ -3,6 +3,11 @@ import { getUserIntegration, saveUserIntegration } from './db';
 
 const CLIENT_ID = config.whoopClientId;
 const CLIENT_SECRET = config.whoopClientSecret;
+const REDIRECT_URI = config.whoopRedirectUri;
+
+// Avoid hammering Whoop and log spam: skip refresh for this user for 60s after a failure
+const refreshFailureUntil = new Map<string, number>();
+const REFRESH_BACKOFF_MS = 60_000;
 
 // Whoop API v2 – all endpoints (v1 deprecated per https://developer.whoop.com/docs/developing/v1-v2-migration)
 export const WHOOP_API_V2_BASE = 'https://api.prod.whoop.com/developer/v2';
@@ -11,39 +16,74 @@ export async function getValidAccessToken(userId: string): Promise<string | null
     const integration = await getUserIntegration(userId, 'whoop');
     if (!integration) return null;
 
-    // Check if expired (buffer 5 mins)
-    if (new Date() >= new Date(integration.expiresAt!.getTime() - 5 * 60000)) {
-        try {
-            const tokenResponse = await fetch('https://api.prod.whoop.com/oauth/oauth2/token', {
+    const now = Date.now();
+    const expiresAt = integration.expiresAt?.getTime() ?? 0;
+    const bufferMs = 5 * 60 * 1000;
+
+    if (now < expiresAt - bufferMs) {
+        return integration.accessToken;
+    }
+
+    const backoffUntil = refreshFailureUntil.get(userId) ?? 0;
+    if (now < backoffUntil) {
+        return null;
+    }
+
+    const refreshToken = integration.refreshToken?.trim();
+    if (!refreshToken) return null;
+
+    try {
+        const params: Record<string, string> = {
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+            client_id: CLIENT_ID || '',
+            client_secret: CLIENT_SECRET || ''
+        };
+        if (REDIRECT_URI) params.redirect_uri = REDIRECT_URI;
+
+        let tokenResponse = await fetch('https://api.prod.whoop.com/oauth/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(params)
+        });
+
+        if (tokenResponse.status >= 500 && tokenResponse.status < 600) {
+            await new Promise((r) => setTimeout(r, 2000));
+            tokenResponse = await fetch('https://api.prod.whoop.com/oauth/oauth2/token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    grant_type: 'refresh_token',
-                    refresh_token: integration.refreshToken || '',
-                    client_id: CLIENT_ID || '',
-                    client_secret: CLIENT_SECRET || ''
-                })
+                body: new URLSearchParams(params)
             });
-
-            if (!tokenResponse.ok) throw new Error(`Refresh failed: ${await tokenResponse.text()}`);
-            const tokens = await tokenResponse.json();
-
-            const expiryDate = new Date(Date.now() + (tokens.expires_in * 1000));
-            await saveUserIntegration({
-                userId,
-                provider: 'whoop',
-                accessToken: tokens.access_token,
-                refreshToken: tokens.refresh_token,
-                expiry: expiryDate,
-                metadata: { scope: tokens.scope }
-            });
-            return tokens.access_token;
-        } catch (e) {
-            console.error('[WhoopClient] Refresh error:', e);
-            return null;
         }
+
+        if (!tokenResponse.ok) {
+            const text = await tokenResponse.text();
+            let errPayload: { error?: string; error_description?: string; status_code?: number } = { status_code: tokenResponse.status };
+            try {
+                Object.assign(errPayload, JSON.parse(text));
+            } catch {
+                errPayload.error_description = text || tokenResponse.statusText;
+            }
+            throw new Error(`Refresh failed: ${JSON.stringify(errPayload)}`);
+        }
+
+        const tokens = await tokenResponse.json();
+        const expiryDate = new Date(Date.now() + (tokens.expires_in * 1000));
+        await saveUserIntegration({
+            userId,
+            provider: 'whoop',
+            accessToken: tokens.access_token,
+            refreshToken: tokens.refresh_token ?? refreshToken,
+            expiry: expiryDate,
+            metadata: { scope: tokens.scope }
+        });
+        refreshFailureUntil.delete(userId);
+        return tokens.access_token;
+    } catch (e) {
+        refreshFailureUntil.set(userId, now + REFRESH_BACKOFF_MS);
+        console.error('[WhoopClient] Refresh error:', e);
+        return null;
     }
-    return integration.accessToken;
 }
 
 async function fetchWhoop(endpoint: string, token: string) {

@@ -18,6 +18,8 @@ export interface ProfileUpdateRequest {
   field?: string;
   value?: string;
   note?: string;
+  /** Remove the first note whose text contains this string (e.g. "mother", "Namrata"). */
+  remove_note?: string;
   metadata?: Record<string, any>;
 }
 
@@ -92,14 +94,15 @@ export function validateProfileUpdateRequest(data: any): data is ProfileUpdateRe
     return false;
   }
 
-  const { field, value, note, metadata } = data;
+  const { field, value, note, remove_note, metadata } = data;
 
-  // Must have either field+value or note
-  const hasFieldValue = typeof field === 'string' && field.length > 0 && 
+  // Must have field+value, note, or remove_note
+  const hasFieldValue = typeof field === 'string' && field.length > 0 &&
                        typeof value === 'string';
   const hasNote = typeof note === 'string' && note.length > 0;
+  const hasRemoveNote = typeof remove_note === 'string' && remove_note.length > 0;
 
-  if (!hasFieldValue && !hasNote) {
+  if (!hasFieldValue && !hasNote && !hasRemoveNote) {
     return false;
   }
 
@@ -120,6 +123,13 @@ export function validateProfileUpdateRequest(data: any): data is ProfileUpdateRe
   // Note validation
   if (note !== undefined) {
     if (typeof note !== 'string' || note.length === 0 || note.length > 2000) {
+      return false;
+    }
+  }
+
+  // remove_note validation
+  if (remove_note !== undefined) {
+    if (typeof remove_note !== 'string' || remove_note.length === 0 || remove_note.length > 200) {
       return false;
     }
   }

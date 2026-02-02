@@ -97,18 +97,7 @@ create table if not exists gmail_thread_bodies (
 );
 create unique index if not exists idx_gmail_thread_bodies_thread on gmail_thread_bodies(thread_id);
 
-create table if not exists tasks (
-    id uuid primary key default gen_random_uuid(),
-    user_id uuid not null references users(id),
-    source text not null,
-    description text not null,
-    thread_id text,
-    due_date timestamptz,
-    status text not null default 'open',
-    created_at timestamptz not null default now()
-);
-create index if not exists idx_tasks_user_id on tasks(user_id);
-create index if not exists idx_tasks_thread_id on tasks(thread_id);
+-- tasks: use feed_cards with type='task'; data = { description, due_date?, status?, source?, thread_id? }
 
 create table if not exists memory_ingestions (
     id uuid primary key default gen_random_uuid(),
@@ -178,3 +167,9 @@ create table if not exists feed_cards (
 );
 create index if not exists idx_feed_cards_user_id on feed_cards(user_id);
 create index if not exists idx_feed_cards_user_type_status on feed_cards(user_id, type, status);
+
+create table if not exists memory_extraction_runs (
+    id serial primary key,
+    ran_at timestamptz not null default now()
+);
+create index if not exists idx_memory_extraction_runs_ran_at on memory_extraction_runs(ran_at desc);
