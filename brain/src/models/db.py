@@ -16,9 +16,16 @@ async def save_message(conversation_id: str, role: str, text: str) -> None:
 
 
 async def save_memory(user_id: str, content: str, source: str = "chat") -> str:
-    # TODO: insert into memories table and return id.
-    _ = (user_id, content, source)
-    return "memory-id"
+    from ..services import user_memory_store
+    return await user_memory_store.insert_user_memory(
+        user_id=user_id,
+        content=content,
+        source_type=source,
+        source_id=None,
+        scope=None,
+        confidence=None,
+        embedding=None,
+    )
 
 
 async def search_memories(query: str, user_id: str) -> List[dict]:

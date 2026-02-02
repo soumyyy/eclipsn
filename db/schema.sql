@@ -143,3 +143,34 @@ CREATE TABLE IF NOT EXISTS memory_chunks (
 );
 CREATE INDEX IF NOT EXISTS idx_memory_chunks_ingestion ON memory_chunks(ingestion_id);
 CREATE INDEX IF NOT EXISTS idx_memory_chunks_user ON memory_chunks(user_id);
+
+CREATE TABLE IF NOT EXISTS user_memories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    content TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_id TEXT,
+    scope TEXT,
+    confidence REAL,
+    embedding VECTOR(1536),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_user_memories_user_deleted
+    ON user_memories (user_id, deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_memories_embedding
+    ON user_memories USING hnsw (embedding vector_cosine_ops)
+    WHERE deleted_at IS NULL AND embedding IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS feed_cards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    type TEXT NOT NULL,
+    priority_score REAL NOT NULL DEFAULT 0,
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_feed_cards_user_id ON feed_cards(user_id);
+CREATE INDEX IF NOT EXISTS idx_feed_cards_user_type_status ON feed_cards(user_id, type, status);

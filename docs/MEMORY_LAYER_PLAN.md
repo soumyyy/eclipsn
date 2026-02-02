@@ -189,3 +189,18 @@ There is **no** table for:
 4. **Chat**: No change to gateway chat API; only brain tool behavior. User says “what do you remember about X?” → agent calls recall → answers with citations.
 
 This gives you the exact plan and order; Phase 1 is “memory store + recall” only, with a clear path to add “forget this,” sent mail, extraction with confidence, and orchestrator polish next.
+
+---
+
+## 6. Ingestion order (sync + learn)
+
+**Goal:** Ingest and learn from mail in a fixed order: main account sent (1y) → main account inbox → then other accounts (service accounts) → their inbox.
+
+**Implemented (main account):**
+
+1. **Phase 1 – Sent (last 1 year):** Initial Gmail sync runs **sent** first: `in:sent` + date range (default 365 days). Threads are synced into `gmail_threads`; embeddings and “learn” (Phase 4 extraction) use this data.
+2. **Phase 2 – Inbox (last 1 year):** Same user, same date range, **inbox** (no `in:sent`). Threads upsert into `gmail_threads`; overlapping threads (in both sent and inbox) are updated.
+
+**Other accounts (service accounts):** Synced separately (e.g. `serviceAccountSync`). Intended order per account: **sent** (e.g. last 1y) first, then **inbox**. Today service-account sync is PDF/attachment-focused; extending it to follow sent → inbox for memory/learning is a follow-up.
+
+**Learning:** “Learn” = Phase 4 extraction (Gmail + bespoke → candidates → score → insert into `user_memories`). Sync order only affects *which* mail is available first; extraction can run after sync (batch or on-demand).

@@ -87,6 +87,9 @@ async function getAuthorizedGmail(userId: string) {
   return google.gmail({ version: 'v1', auth: oauth2Client });
 }
 
+/** 'sent' = in:sent (last N); 'inbox' or omit = primary inbox. Used for ingestion order: sent first, then inbox. */
+export type MailboxFilter = 'inbox' | 'sent';
+
 interface ThreadFilters {
   importanceOnly?: boolean;
   maxResults?: number;
@@ -94,6 +97,8 @@ interface ThreadFilters {
   endDate?: string;
   pageToken?: string;
   customQuery?: string;
+  /** When set, builds query for that mailbox (sent vs inbox). Ignored if customQuery is set. */
+  mailbox?: MailboxFilter;
 }
 
 export interface FetchThreadsResult {
@@ -111,7 +116,12 @@ export async function estimateThreadCount(
     const gmail = await getAuthorizedGmail(userId);
     const query = filters.customQuery
       ? filters.customQuery
-      : buildQuery(filters.startDate, filters.endDate, filters.importanceOnly !== false);
+      : buildQuery(
+          filters.startDate,
+          filters.endDate,
+          filters.importanceOnly !== false,
+          filters.mailbox
+        );
     const response = await gmail.users.threads.list({
       userId: 'me',
       maxResults: 1,
@@ -136,7 +146,12 @@ export async function fetchRecentThreads(
     const fetchLimit = Math.min(filters.maxResults ?? maxResults ?? 20, 1000);
     const query = filters.customQuery
       ? filters.customQuery
-      : buildQuery(filters.startDate, filters.endDate, filters.importanceOnly !== false);
+      : buildQuery(
+          filters.startDate,
+          filters.endDate,
+          filters.importanceOnly !== false,
+          filters.mailbox
+        );
     const threadList = await gmail.users.threads.list({
       userId: 'me',
       maxResults: fetchLimit,
@@ -474,13 +489,21 @@ function mapLabelIds(ids: string[]): string[] {
     .map((id) => LABEL_NAME_MAP[id] || id.replace('CATEGORY_', '').toLowerCase());
 }
 
-function buildQuery(startDate?: string, endDate?: string, importanceOnly = true) {
+function buildQuery(
+  startDate?: string,
+  endDate?: string,
+  importanceOnly = true,
+  mailbox?: MailboxFilter
+) {
   const parts: string[] = [];
   if (startDate) {
     parts.push(`after:${startDate}`);
   }
   if (endDate) {
     parts.push(`before:${endDate}`);
+  }
+  if (mailbox === 'sent') {
+    parts.push('in:sent');
   }
   if (importanceOnly) {
     parts.push('category:primary OR label:important');

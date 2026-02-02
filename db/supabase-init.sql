@@ -147,3 +147,34 @@ create table if not exists memory_chunks (
 create index if not exists idx_memory_chunks_ingestion on memory_chunks(ingestion_id);
 create index if not exists idx_memory_chunks_user on memory_chunks(user_id);
 create index if not exists idx_memory_chunks_ingestion_user on memory_chunks(ingestion_id, user_id);
+
+create table if not exists user_memories (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references users(id),
+    content text not null,
+    source_type text not null,
+    source_id text,
+    scope text,
+    confidence real,
+    embedding vector(1536),
+    created_at timestamptz not null default now(),
+    deleted_at timestamptz
+);
+create index if not exists idx_user_memories_user_deleted
+    on user_memories (user_id, deleted_at) where deleted_at is null;
+create index if not exists idx_user_memories_embedding
+    on user_memories using hnsw (embedding vector_cosine_ops)
+    where deleted_at is null and embedding is not null;
+
+create table if not exists feed_cards (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references users(id),
+    type text not null,
+    priority_score real not null default 0,
+    data jsonb not null default '{}'::jsonb,
+    status text not null default 'active',
+    created_at timestamptz not null default now(),
+    expires_at timestamptz
+);
+create index if not exists idx_feed_cards_user_id on feed_cards(user_id);
+create index if not exists idx_feed_cards_user_type_status on feed_cards(user_id, type, status);

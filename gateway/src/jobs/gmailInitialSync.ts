@@ -12,6 +12,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const INITIAL_SYNC_LOOKBACK_DAYS = parseInt(process.env.GMAIL_INITIAL_SYNC_DAYS || '365', 10);
 const INITIAL_SYNC_PAGE_SIZE = parseInt(process.env.GMAIL_INITIAL_SYNC_PAGE_SIZE || '100', 10);
 
+/** Ingestion order: 1) main account sent (1y), 2) main account inbox (1y). Other accounts (service accounts) are synced separately. */
+type SyncPhase = 'sent' | 'inbox';
+
 type SyncAbortReason = 'disabled' | 'no-tokens';
 
 async function resolveSyncAbortReason(userId: string): Promise<SyncAbortReason | null> {
@@ -76,13 +79,20 @@ export async function runInitialGmailSync(userId: string): Promise<void> {
       return;
     }
 
-    const estimatedTotal = await estimateThreadCount(userId, {
+    const dateFilters = {
       startDate: formatGmailDate(start),
       endDate: formatGmailDate(now),
       importanceOnly: false
-    }).catch(() => null);
-    if (estimatedTotal) {
-      console.log(`[Gmail Sync] Estimated ${estimatedTotal} threads for user ${userId}`);
+    };
+    const [sentEst, inboxEst] = await Promise.all([
+      estimateThreadCount(userId, { ...dateFilters, mailbox: 'sent' }).catch(() => null),
+      estimateThreadCount(userId, { ...dateFilters, mailbox: 'inbox' }).catch(() => null)
+    ]);
+    const estimatedTotal = (sentEst ?? 0) + (inboxEst ?? 0);
+    if (sentEst != null || inboxEst != null) {
+      console.log(
+        `[Gmail Sync] Estimated for user ${userId}: sent=${sentEst ?? '?'} inbox=${inboxEst ?? '?'} total=${estimatedTotal}`
+      );
     } else {
       console.log(`[Gmail Sync] Could not determine thread estimate for user ${userId}`);
     }
@@ -94,40 +104,52 @@ export async function runInitialGmailSync(userId: string): Promise<void> {
     await markInitialGmailSync(userId, {
       started: true,
       completed: false,
-      totalThreads: estimatedTotal ?? 0,
+      totalThreads: estimatedTotal || 0,
       syncedThreads: 0
     });
     void emitGmailStatusUpdate(userId);
 
-    let pageToken: string | undefined;
     let totalSynced = 0;
-    do {
-      if (await shouldAbort('before batch fetch')) {
-        break;
-      }
-      const result = await fetchRecentThreads(userId, INITIAL_SYNC_PAGE_SIZE, {
-        maxResults: INITIAL_SYNC_PAGE_SIZE,
-        startDate: formatGmailDate(start),
-        endDate: formatGmailDate(now),
-        pageToken,
-        importanceOnly: false
-      });
-      if (await shouldAbort('before batch progress update')) {
-        break;
-      }
-      totalSynced += result.threads.length;
-      await markInitialGmailSync(userId, { syncedThreads: totalSynced });
-      void emitGmailStatusUpdate(userId);
-      const denom = estimatedTotal ?? result.resultSizeEstimate ?? 0;
-      if (denom) {
-        console.log(
-          `[Gmail Sync] user ${userId} synced ${Math.min(totalSynced, denom)}/${denom} threads (batch ${result.threads.length})`
-        );
-      } else {
-        console.log(`[Gmail Sync] user ${userId} synced ${totalSynced} threads (indeterminate total)`);
-      }
-      pageToken = result.nextPageToken;
-    } while (pageToken);
+
+    const runPhase = async (phase: SyncPhase) => {
+      let pageToken: string | undefined;
+      let phaseSynced = 0;
+      do {
+        if (await shouldAbort(`before ${phase} batch fetch`)) {
+          break;
+        }
+        const result = await fetchRecentThreads(userId, INITIAL_SYNC_PAGE_SIZE, {
+          maxResults: INITIAL_SYNC_PAGE_SIZE,
+          ...dateFilters,
+          mailbox: phase,
+          pageToken
+        });
+        if (await shouldAbort(`before ${phase} batch progress update`)) {
+          break;
+        }
+        phaseSynced += result.threads.length;
+        totalSynced += result.threads.length;
+        await markInitialGmailSync(userId, { syncedThreads: totalSynced });
+        void emitGmailStatusUpdate(userId);
+        const denom = estimatedTotal || result.resultSizeEstimate || 0;
+        if (denom) {
+          console.log(
+            `[Gmail Sync] user ${userId} ${phase} synced ${totalSynced}/${denom} (batch ${result.threads.length})`
+          );
+        } else {
+          console.log(`[Gmail Sync] user ${userId} ${phase} synced ${phaseSynced} (batch ${result.threads.length})`);
+        }
+        pageToken = result.nextPageToken;
+      } while (pageToken);
+    };
+
+    console.log(`[Gmail Sync] user ${userId} phase 1: sent (last ${INITIAL_SYNC_LOOKBACK_DAYS} days)`);
+    await runPhase('sent');
+    if (await shouldAbort('between phases')) {
+      return;
+    }
+    console.log(`[Gmail Sync] user ${userId} phase 2: inbox (last ${INITIAL_SYNC_LOOKBACK_DAYS} days)`);
+    await runPhase('inbox');
 
     if (abortReason) {
       console.log(
