@@ -78,6 +78,12 @@ body {
 .top-nav-link.active {
   color: var(--text);
 }
+.top-nav-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
 
 /* Main content area */
 .main-content {
@@ -485,8 +491,10 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  max-width: 520px;
-  width: 100%;
+  width: 520px;
+  max-width: calc(100vw - 40px);
+  height: 85vh;
+  min-height: 520px;
   max-height: 85vh;
   overflow: hidden;
   display: flex;
@@ -812,8 +820,14 @@ body {
 .profile-history li strong { display: block; }
 .profile-history li small { font-size: 12px; color: var(--text-muted); }
 
-/* Memory / Index modal – minimal */
-.profile-modal.memory-modal { max-width: 520px; }
+/* Memory / Index modal – fixed size */
+.profile-modal.memory-modal {
+  width: 520px;
+  max-width: calc(100vw - 40px);
+  height: 85vh;
+  min-height: 420px;
+  max-height: 85vh;
+}
 .memory-single-column { display: flex; flex-direction: column; gap: 24px; }
 .memory-history-header, .memory-history-header h3 {
   display: flex;

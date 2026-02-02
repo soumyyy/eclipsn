@@ -558,7 +558,8 @@ export async function getUserProfile(userId: string) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT full_name as "fullName",
+      `SELECT document,
+              full_name as "fullName",
               preferred_name as "preferredName",
               timezone,
               contact_email as "contactEmail",
@@ -568,7 +569,8 @@ export async function getUserProfile(userId: string) {
               preferences,
               biography,
               custom_data as "customData",
-              updated_at as "updatedAt"
+              updated_at as "updatedAt",
+              gmail_onboarded as "gmailOnboarded"
        FROM user_profiles
        WHERE user_id = $1`,
       [userId]
@@ -576,19 +578,63 @@ export async function getUserProfile(userId: string) {
     if (result.rowCount === 0) {
       return null;
     }
-    const profile = result.rows[0] as {
-      customData?: {
-        notes?: Array<string | { text?: string; timestamp?: string | null }>;
-        [key: string]: unknown;
-      };
+    const row = result.rows[0] as {
+      document: Record<string, unknown> | null;
+      fullName?: string | null;
+      preferredName?: string | null;
+      timezone?: string | null;
+      contactEmail?: string | null;
+      phone?: string | null;
+      company?: string | null;
+      role?: string | null;
+      preferences?: unknown;
+      biography?: string | null;
+      customData?: Record<string, unknown>;
+      updatedAt: string;
+      gmailOnboarded: boolean;
     };
-    if (profile?.customData?.notes) {
-      profile.customData.notes = normalizeProfileNotes(profile.customData.notes);
+    const hasDocument = row.document && typeof row.document === 'object' && Object.keys(row.document).length > 0;
+    const doc: Record<string, unknown> = hasDocument
+      ? { ...row.document }
+      : legacyRowToDocument(row);
+    const profile = { ...doc, updatedAt: row.updatedAt, gmailOnboarded: row.gmailOnboarded } as Record<string, unknown>;
+    if (profile?.customData && typeof profile.customData === 'object' && 'notes' in profile.customData) {
+      const cd = profile.customData as { notes?: unknown };
+      cd.notes = normalizeProfileNotes(cd.notes);
     }
     return profile;
   } finally {
     client.release();
   }
+}
+
+function legacyRowToDocument(row: {
+  fullName?: string | null;
+  preferredName?: string | null;
+  timezone?: string | null;
+  contactEmail?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  role?: string | null;
+  preferences?: unknown;
+  biography?: string | null;
+  customData?: Record<string, unknown>;
+}): Record<string, unknown> {
+  const doc: Record<string, unknown> = {
+    fullName: row.fullName ?? null,
+    preferredName: row.preferredName ?? null,
+    timezone: row.timezone ?? null,
+    contactEmail: row.contactEmail ?? null,
+    phone: row.phone ?? null,
+    company: row.company ?? null,
+    role: row.role ?? null,
+    preferences: row.preferences ?? null,
+    biography: row.biography ?? null
+  };
+  if (row.customData && typeof row.customData === 'object' && Object.keys(row.customData).length > 0) {
+    doc.customData = row.customData;
+  }
+  return doc;
 }
 
 export async function getGmailOnboardingStatus(userId: string): Promise<boolean> {
@@ -624,72 +670,45 @@ export async function setGmailOnboardingStatus(userId: string, onboarded: boolea
   }
 }
 
+/**
+ * Deep-merge incoming object into existing document (one level for nested objects).
+ * Top-level keys are replaced; nested objects (e.g. customData) are merged.
+ */
+function mergeIntoDocument(existing: Record<string, unknown>, incoming: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...existing };
+  for (const key of Object.keys(incoming)) {
+    if (key === 'updatedAt' || key === 'gmailOnboarded') continue;
+    const inc = incoming[key];
+    const cur = out[key];
+    if (inc != null && typeof inc === 'object' && !Array.isArray(inc) && typeof cur === 'object' && cur != null && !Array.isArray(cur)) {
+      out[key] = { ...(cur as Record<string, unknown>), ...(inc as Record<string, unknown>) };
+    } else {
+      out[key] = inc;
+    }
+  }
+  if (out.customData && typeof out.customData === 'object' && 'notes' in (out.customData as object)) {
+    const cd = out.customData as { notes?: unknown };
+    cd.notes = normalizeProfileNotes(cd.notes);
+  }
+  return out;
+}
+
 export async function upsertUserProfile(userId: string, data: Record<string, unknown>) {
   const client = await pool.connect();
   try {
+    await ensureUserRecord(userId);
     const existingRes = await client.query(
-      `SELECT full_name,
-              preferred_name,
-              timezone,
-              contact_email,
-              phone,
-              company,
-              role,
-              preferences,
-              biography,
-              custom_data
-       FROM user_profiles
-       WHERE user_id = $1`,
+      `SELECT document FROM user_profiles WHERE user_id = $1`,
       [userId]
     );
-    const existing = existingRes.rows[0] || {};
-    const incomingCustom = (data.customData ?? data.custom_data ?? {}) as Record<string, unknown>;
-    const existingCustom = (existing.custom_data ?? {}) as Record<string, unknown>;
-    const mergedCustom = { ...existingCustom, ...incomingCustom };
-    const existingNotes = normalizeProfileNotes(existingCustom.notes);
-    const incomingNotes = normalizeProfileNotes(incomingCustom.notes);
-    const notesProvided = Object.prototype.hasOwnProperty.call(incomingCustom, 'notes');
-    if (notesProvided) {
-      if (incomingNotes.length > 0) {
-        mergedCustom.notes = incomingNotes;
-      } else {
-        delete mergedCustom.notes;
-      }
-    } else if (existingNotes.length > 0) {
-      mergedCustom.notes = existingNotes;
-    } else {
-      delete mergedCustom.notes;
-    }
-    const preferences = data.preferences ?? existing.preferences ?? null;
-
+    const existingDoc = (existingRes.rows[0]?.document ?? {}) as Record<string, unknown>;
+    const merged = mergeIntoDocument(existingDoc, data);
     await client.query(
-      `INSERT INTO user_profiles (user_id, full_name, preferred_name, timezone, contact_email, phone, company, role, preferences, biography, custom_data)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO user_profiles (user_id, document, updated_at)
+       VALUES ($1, $2::jsonb, NOW())
        ON CONFLICT (user_id)
-       DO UPDATE SET full_name = EXCLUDED.full_name,
-                     preferred_name = EXCLUDED.preferred_name,
-                     timezone = EXCLUDED.timezone,
-                     contact_email = EXCLUDED.contact_email,
-                     phone = EXCLUDED.phone,
-                     company = EXCLUDED.company,
-                     role = EXCLUDED.role,
-                     preferences = EXCLUDED.preferences,
-                     biography = EXCLUDED.biography,
-                     custom_data = EXCLUDED.custom_data,
-                     updated_at = NOW()`,
-      [
-        userId,
-        data.fullName ?? data.full_name ?? existing.full_name ?? null,
-        data.preferredName ?? data.preferred_name ?? existing.preferred_name ?? null,
-        data.timezone ?? existing.timezone ?? null,
-        data.contactEmail ?? data.contact_email ?? existing.contact_email ?? null,
-        data.phone ?? existing.phone ?? null,
-        data.company ?? existing.company ?? null,
-        data.role ?? existing.role ?? null,
-        preferences,
-        data.biography ?? existing.biography ?? null,
-        mergedCustom
-      ]
+       DO UPDATE SET document = EXCLUDED.document, updated_at = NOW()`,
+      [userId, JSON.stringify(merged)]
     );
   } finally {
     client.release();

@@ -22,9 +22,11 @@ create table if not exists user_profiles (
     preferences jsonb,
     biography text,
     custom_data jsonb default '{}'::jsonb,
+    document jsonb not null default '{}'::jsonb,
     gmail_onboarded boolean not null default false,
     updated_at timestamptz not null default now()
 );
+create index if not exists idx_user_profiles_document on user_profiles using gin (document jsonb_path_ops);
 
 create table if not exists conversations (
     id uuid primary key default gen_random_uuid(),

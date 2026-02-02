@@ -378,26 +378,26 @@ export class InternalProfileService {
   }
 
   /**
-   * Format profile for API response.
+   * Format profile for API response. Pass through full document so any key is returned (scalable).
    */
   private formatProfileResponse(profile: any): UserProfileResponse {
     if (!profile) {
       throw new Error('Profile is null or undefined');
     }
-
-    return {
-      fullName: profile.fullName || null,
-      preferredName: profile.preferredName || null,
-      timezone: profile.timezone || null,
-      contactEmail: profile.contactEmail || null,
-      phone: profile.phone || null,
-      company: profile.company || null,
-      role: profile.role || null,
-      preferences: profile.preferences || null,
-      biography: profile.biography || null,
-      customData: profile.customData || null,
+    const base = {
+      fullName: profile.fullName ?? null,
+      preferredName: profile.preferredName ?? null,
+      timezone: profile.timezone ?? null,
+      contactEmail: profile.contactEmail ?? null,
+      phone: profile.phone ?? null,
+      company: profile.company ?? null,
+      role: profile.role ?? null,
+      preferences: profile.preferences ?? null,
+      biography: profile.biography ?? null,
+      customData: profile.customData ?? null,
       updatedAt: profile.updatedAt ? new Date(profile.updatedAt).toISOString() : null
     };
+    return { ...profile, ...base } as UserProfileResponse;
   }
 
   /**

@@ -17,6 +17,10 @@ export type ProfileCustomData = {
   [key: string]: unknown;
 };
 
+/**
+ * User profile is document-based: any key can exist. These are common keys;
+ * the backend stores everything in a single JSONB document so memory can grow without schema changes.
+ */
 export type UserProfile = {
   fullName?: string;
   preferredName?: string;
@@ -28,7 +32,9 @@ export type UserProfile = {
   biography?: string;
   preferences?: Record<string, unknown> | string | null;
   updatedAt?: string | null;
+  gmailOnboarded?: boolean;
   customData?: ProfileCustomData;
+  [key: string]: unknown;
 };
 
 export function normalizeProfileNotes(value: unknown): ProfileNote[] {

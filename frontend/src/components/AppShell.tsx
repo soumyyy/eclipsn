@@ -66,6 +66,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/chat" className={`top-nav-link ${pathname === '/chat' ? 'active' : ''}`}>
             Chat
           </Link>
+          <button
+            type="button"
+            className="top-nav-link top-nav-button"
+            onClick={() => setMemoryOpen(true)}
+          >
+            Index
+          </button>
         </div>
         <button
           type="button"

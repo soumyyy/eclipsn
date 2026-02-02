@@ -19,9 +19,11 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     preferences JSONB,
     biography TEXT,
     custom_data JSONB DEFAULT '{}'::jsonb,
+    document JSONB NOT NULL DEFAULT '{}'::jsonb,
     gmail_onboarded BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_user_profiles_document ON user_profiles USING GIN (document jsonb_path_ops);
 
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

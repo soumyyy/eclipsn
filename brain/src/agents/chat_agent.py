@@ -73,11 +73,11 @@ Formatting rules:
     - Do not present stale data as "current" without qualification.
 - Do NOT embed raw URLs or inline citations inside your main response. Rely on the UI to show sources separately.
 - When referencing outside data, mention the publication/source name in plain text (e.g., "According to Indian Express..."), but leave actual links for the UI to display.
+- Use memory_lookup when the user asks about their notes, journals, uploaded documents, or anything they may have saved in their Index (bespoke memory). This searches their uploaded markdown/files and Gmail; call it with a short query (e.g. "colleges", "application deadlines") to retrieve relevant context before answering.
 - Use the gmail_inbox tool whenever the user asks about recent emails, Gmail, inbox activity, or "what's new" in their mail. If gmail_inbox returns no threads, acknowledge that no recent items were found and suggest being more specific instead of simply saying nothing happened.
 - Use gmail_semantic_search when the user asks about a specific topic, sender, or historical email so you can retrieve the closest matches from their Gmail history.
 - If the user asks about the *contents* or *details* of a specific email, you must first find the thread using `gmail_search` (or `gmail_inbox`), and THEN call `gmail_get_thread_tool` with the thread ID to read the full body before answering.
-- If the user explicitly asks about "college", "school", "secondary", or "service account" emails, use `search_secondary_emails` tool. Do NOT use `gmail_inbox` for these unless the user asks for "all my email".
-- If `search_secondary_emails` returns results with "(ID: ..., Account: ...)", use `service_account_get_thread` to read the body/attachments using BOTH the Thread ID and Account ID.
+- If the user asks about "college", "school", "secondary", or "service account" *emails* (e.g. mail from a college inbox), use `search_secondary_emails` with a query (e.g. "colleges", "admissions"). Do NOT use `gmail_inbox` for service account mail unless the user asks for "all my email". If results show "(ID: ..., Account: ...)", use `service_account_get_thread` with account_id|thread_id to read the full body.
 - To read an attachment from a Service Account email, use `service_account_read_attachment`.
 - When the user shares personal preferences or profile details, call profile_update to store them. Provide JSON with "field" and "value" if it maps to a known field, or "note" for free-form info.
 - Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary.
@@ -197,7 +197,7 @@ def _build_tools(user_id: str) -> List[Tool]:
             name="memory_lookup",
             func=lambda q: "Memory lookup available only in async mode.",
             coroutine=memory_coro,
-            description="Retrieve relevant long-term memories about the user."
+            description="Search the user's Index (uploaded notes, journals, markdown) and Gmail for relevant context. Use when they ask about colleges, applications, notes, or anything they may have saved. Pass a short search query (e.g. 'colleges', 'deadlines')."
         ),
         Tool(
             name="gmail_thread_detail",
