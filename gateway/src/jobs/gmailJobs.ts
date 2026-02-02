@@ -4,7 +4,6 @@ import { listUsersWithGmailTokens, removeExpiredGmailThreads } from '../services
 import { areGmailJobsDisabled } from '../services/gmailJobControl';
 
 async function runIncrementalSync(windowMinutes: number) {
-  const query = `newer_than:${windowMinutes}m (category:primary OR label:important)`;
   const userIds = await listUsersWithGmailTokens();
   if (!userIds.length) {
     console.log('[Gmail Sync] Skipping incremental sync (no connected users)');
@@ -16,14 +15,18 @@ async function runIncrementalSync(windowMinutes: number) {
       continue;
     }
     try {
-      const result = await fetchRecentThreads(userId, 200, {
-        customQuery: query,
-        importanceOnly: false
+      const inboxResult = await fetchRecentThreads(userId, 200, {
+        customQuery: `newer_than:${windowMinutes}m in:inbox`,
+        importanceOnly: false,
+        mailboxHint: 'inbox'
+      });
+      const sentResult = await fetchRecentThreads(userId, 200, {
+        customQuery: `newer_than:${windowMinutes}m in:sent`,
+        importanceOnly: false,
+        mailboxHint: 'sent'
       });
       console.log(
-        `[Gmail Sync] Incremental sync fetched ${result.threads.length} threads for user ${userId} (categories:`,
-        result.counts,
-        ')'
+        `[Gmail Sync] Incremental sync fetched ${inboxResult.threads.length + sentResult.threads.length} threads for user ${userId} (inbox=${inboxResult.threads.length}, sent=${sentResult.threads.length})`
       );
     } catch (error) {
       if (error instanceof Error && error.message === GMAIL_JOBS_DISABLED) {

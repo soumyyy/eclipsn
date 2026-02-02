@@ -68,10 +68,11 @@ CREATE TABLE IF NOT EXISTS gmail_threads (
     summary TEXT,
     sender TEXT,
     category TEXT,
-  importance_score INT,
-  expires_at TIMESTAMPTZ,
-  last_message_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    importance_score INT,
+    mailbox TEXT,
+    expires_at TIMESTAMPTZ,
+    last_message_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_gmail_threads_user_thread ON gmail_threads(user_id, thread_id);
 

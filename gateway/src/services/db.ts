@@ -215,6 +215,7 @@ export interface GmailThreadRecord {
   category?: string;
   importanceScore?: number;
   expiresAt?: Date | null;
+  mailbox?: 'inbox' | 'sent' | null;
 }
 
 export async function saveGmailThreads(userId: string, threads: GmailThreadRecord[]) {
@@ -224,8 +225,8 @@ export async function saveGmailThreads(userId: string, threads: GmailThreadRecor
   try {
     for (const thread of threads) {
       const result = await client.query(
-        `INSERT INTO gmail_threads (id, user_id, thread_id, subject, summary, sender, category, importance_score, expires_at, last_message_at)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO gmail_threads (id, user_id, thread_id, subject, summary, sender, category, importance_score, expires_at, last_message_at, mailbox)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (user_id, thread_id)
          DO UPDATE SET subject = EXCLUDED.subject,
                        summary = EXCLUDED.summary,
@@ -233,7 +234,8 @@ export async function saveGmailThreads(userId: string, threads: GmailThreadRecor
                        category = EXCLUDED.category,
                        importance_score = EXCLUDED.importance_score,
                        expires_at = EXCLUDED.expires_at,
-                       last_message_at = EXCLUDED.last_message_at
+                       last_message_at = EXCLUDED.last_message_at,
+                       mailbox = EXCLUDED.mailbox
          RETURNING id`,
         [
           userId,
@@ -244,7 +246,8 @@ export async function saveGmailThreads(userId: string, threads: GmailThreadRecor
           thread.category,
           thread.importanceScore ?? 0,
           thread.expiresAt ?? null,
-          thread.lastMessageAt ?? null
+          thread.lastMessageAt ?? null,
+          thread.mailbox ?? null
         ]
       );
       if (result.rows[0]?.id) {
@@ -419,6 +422,10 @@ export async function listGmailThreadSummaries(userId: string, limit: number): P
   subject: string | null;
   summary: string | null;
   sender: string | null;
+  category: string | null;
+  lastMessageAt: Date | null;
+  expiresAt: Date | null;
+  mailbox: string | null;
 }>> {
   const client = await pool.connect();
   try {
@@ -427,7 +434,11 @@ export async function listGmailThreadSummaries(userId: string, limit: number): P
               thread_id as "threadId",
               subject,
               summary,
-              sender
+              sender,
+              category,
+              last_message_at as "lastMessageAt",
+              expires_at as "expiresAt",
+              mailbox
        FROM gmail_threads
        WHERE user_id = $1
        ORDER BY last_message_at DESC NULLS LAST
@@ -440,6 +451,10 @@ export async function listGmailThreadSummaries(userId: string, limit: number): P
       subject: string | null;
       summary: string | null;
       sender: string | null;
+      category: string | null;
+      lastMessageAt: Date | null;
+      expiresAt: Date | null;
+      mailbox: string | null;
     }>;
   } finally {
     client.release();
@@ -501,6 +516,25 @@ export async function insertMessage(params: {
       `INSERT INTO messages (id, conversation_id, role, text)
        VALUES (gen_random_uuid(), $1, $2, $3)`,
       [params.conversationId, params.role, params.text]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+export async function ensureConversation(params: {
+  userId: string;
+  conversationId: string;
+  title?: string | null;
+}) {
+  await ensureUserRecord(params.userId);
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO conversations (id, user_id, title)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO NOTHING`,
+      [params.conversationId, params.userId, params.title ?? null]
     );
   } finally {
     client.release();
@@ -1036,6 +1070,41 @@ export async function insertMemoryChunk(params: {
         params.metadata ?? {}
       ]
     );
+  } finally {
+    client.release();
+  }
+}
+
+export async function insertMemoryChunks(params: {
+  ingestionId: string;
+  userId: string;
+  source: string;
+  filePath: string;
+  chunks: Array<{ chunkIndex: number; content: string; metadata?: Record<string, unknown> }>;
+}) {
+  if (!params.chunks.length) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const chunk of params.chunks) {
+      await client.query(
+        `INSERT INTO memory_chunks (id, ingestion_id, user_id, source, file_path, chunk_index, content, metadata)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)`,
+        [
+          params.ingestionId,
+          params.userId,
+          params.source,
+          params.filePath,
+          chunk.chunkIndex,
+          chunk.content,
+          chunk.metadata ?? {}
+        ]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
   } finally {
     client.release();
   }
@@ -2127,4 +2196,3 @@ export async function createTaskCard(userId: string, data: TaskCardData): Promis
     client.release();
   }
 }
-

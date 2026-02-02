@@ -65,7 +65,11 @@ class GmailInboxInput(BaseModel):
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are Eclipsn, a personal agent for a single user. You know about the user from past conversations and, soon, from their email. Your job is to help summarize information, extract tasks, and keep track of what matters to them. Use memories when helpful, call the web_search tool whenever you need up-to-date facts or entertainment news. If the user references anything that may have changed after 2024 (news, entertainment, finance, product releases, etc.), you MUST call web_search before answering.
+SYSTEM_PROMPT = """You are Eclipsn, a personal agent for a single user—like a blend of Alfred, Friday, and JARVIS. You are capable, discreet, and genuinely helpful: a buddy who has their back. You know about the user from past conversations and, soon, from their email. Your tone is warm and human, never robotic: concise when it helps, a bit more chatty when they need context. You anticipate needs, offer to help before being asked, and keep what matters to them in mind. Use memories when helpful; call the web_search tool whenever you need up-to-date facts or entertainment news. If the user references anything that may have changed after 2024 (news, entertainment, finance, product releases, etc.), you MUST call web_search before answering.
+
+**Voice and style:** Reply in a refined but friendly way. Prefer short, clear sentences. Use small caps for a polished tone where it fits (e.g. for emphasis or a calm, steady feel). Be the capable friend in the room—helpful, never condescending.
+
+- **URL / link in the message**: When the user includes a URL or a bare domain (e.g. example.com or https://example.com), the system has already fetched that page's content and appended it to their message under "URL Context". You MUST answer based on that URL Context only. Do NOT call web_search for that link or for the person/site name—the user wants to know what is on that specific page. Summarize or answer using the URL Context text. If the URL Context section is empty or says the fetch failed, then tell the user the page could not be loaded and optionally offer to search the web instead.
 
 Current Context:
 - Current Date & Time: {current_time}
@@ -78,6 +82,7 @@ Formatting rules:
 - Do NOT embed raw URLs or inline citations inside your main response. Rely on the UI to show sources separately.
 - When referencing outside data, mention the publication/source name in plain text (e.g., "According to Indian Express..."), but leave actual links for the UI to display.
 - When the user shares a personal fact (e.g. "my mother is Namrata", "I'm from Boston") or says "remember X", store it with memory_save so they can recall and forget it later. Use memory_save for facts; use profile_update only for structured fields (name, timezone) or short scratch notes.
+- **Saving information**: When the user asks you to "save this", "remember this", "learn from this and save", or "store this information", you MUST call memory_save one or more times with the concrete facts or summary to store. Pass each distinct fact as a separate call if helpful, or one consolidated summary. Only after you receive a response that starts with "Stored: [id: ...]" can you tell the user the information was saved. If you did NOT call memory_save, or the tool returned an error (e.g. "Error: ..."), do NOT say you have saved—say clearly that you could not save and suggest trying again.
 - **Memory tools (choose the right one):**
   - memory_context: Use when the user asks a very broad question (e.g. "what do you know about me?", "summarize my context", "run the whole context"). Returns a single context blob (user_memories + profile + bespoke + Gmail) trimmed to a token budget so you can answer without blowing the window. Pass a short query (e.g. "me", "overview") and optionally max_tokens (default 2000).
   - memory_lookup: Use for targeted recall—"what do you know about X?" (e.g. mother, colleges). Returns [id: <id>] per item so the user can say "forget that" and you call memory_forget(id). Use when the question is about a specific topic, not "everything".
@@ -90,7 +95,7 @@ Formatting rules:
 - To read an attachment from a Service Account email, use `service_account_read_attachment`.
 - When the user shares personal preferences or profile details, call profile_update to store them. Provide JSON with "field" and "value" if it maps to a known field, or "note" for free-form info.
 - When the user asks to add a task, todo, or reminder, call create_task with the task description (e.g. "Reply to client", "Buy milk"). Tasks are stored without a separate table and can be listed in the app.
-- Be verbose when explaining reasoning or listing numeric details so the user gets a useful summary.
+- Be helpful and clear when explaining reasoning or listing details—give the user what they need without fluff.
 - **WHOOP / HEALTH**: You have access to detailed Whoop data via `whoop_recovery`, `whoop_sleep`, `whoop_workout`, `whoop_cycle`, and `whoop_body`. If the user mentions health, fitness, energy, or workouts, check the relevant tool(s).
     - If recovery < 33 (Red): Be a compassionate coach. Suggest rest.
     - If recovery 34-66 (Yellow): Be encouraging but cautious.
@@ -143,8 +148,12 @@ def _build_tools(user_id: str) -> List[Tool]:
         return await forget_memory_tool(user_id=user_id, memory_id=memory_id)
 
     async def memory_save_coro(content: str) -> str:
-        m = await create_memory_tool(user_id=user_id, content=content.strip(), source="chat")
-        return f"Stored: [id: {m.id}] {m.content}"
+        try:
+            m = await create_memory_tool(user_id=user_id, content=content.strip(), source="chat")
+            return f"Stored: [id: {m.id}] {m.content}"
+        except Exception as e:  # noqa: BLE001
+            logger.warning("memory_save failed for user %s: %s", user_id, e)
+            return "Error: Could not save to memory (database or embedding issue). Please try again."
 
     async def memory_context_coro(query: str, max_tokens: int = 2000) -> str:
         return await get_context_with_budget(user_id, (query or "overview").strip(), max_tokens=max_tokens)
@@ -234,7 +243,7 @@ def _build_tools(user_id: str) -> List[Tool]:
             name="memory_save",
             func=lambda c: "Memory save available only in async mode.",
             coroutine=memory_save_coro,
-            description="Store a fact or note in the user's memories so they can recall it later and optionally forget it. Use when the user says 'remember X', 'my X is Y', or shares a personal fact (e.g. 'my mother is Namrata'). Pass the content to store as a single string. This allows memory_forget to remove it later if they ask."
+            description="Store a fact or note in the user's memories so they can recall it later and optionally forget it. Use when the user says 'remember X', 'my X is Y', 'save this', 'learn from this and save', or shares a personal fact. Pass the content to store as a single string. Success returns 'Stored: [id: <uuid>] <content>'. Only tell the user you saved after you receive that response; if the tool returns an error, tell them you could not save."
         ),
         Tool(
             name="memory_forget",
@@ -333,15 +342,95 @@ def _format_history(history: Optional[List[dict]], max_items: int = 6) -> str:
 
 
 URL_PATTERN = re.compile(r"https?://\S+")
+# Bare domains (e.g. soumyamaheshwari.com or example.com/page); TLD must be letters
+BARE_DOMAIN_PATTERN = re.compile(
+    r"(?:^|[\s(])([a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}(?:/[^\s\])\}\"']*)?)(?=[\s\])\}\"',;:!?]|$)"
+)
 
 
-async def _collect_url_context(message: str, max_urls: int = 2) -> tuple[str, List[SearchSource]]:
-    urls = URL_PATTERN.findall(message or "")
+# Strip trailing punctuation that often attaches to pasted URLs
+def _clean_url(raw: str) -> str:
+    s = raw.rstrip()
+    for _ in range(3):
+        if s and s[-1] in ".,;:!?)\\]}\"'>":
+            s = s[:-1]
+        else:
+            break
+    return s
+
+
+def _normalize_to_url(candidate: str) -> str:
+    """Prepend https:// if it looks like a bare domain."""
+    c = candidate.strip()
+    if not c:
+        return ""
+    if c.startswith("http://") or c.startswith("https://"):
+        return _clean_url(c)
+    # Bare domain: add https://
+    return "https://" + _clean_url(c)
+
+
+# Max chars to save in one memory (keeps embedding/DB safe)
+_AUTO_SAVE_MAX_CHARS = 4000
+
+
+def _user_wants_to_save(message: str) -> bool:
+    """True if the user is asking to save/remember/store the current or previous context."""
+    if not (message or "").strip():
+        return False
+    lower = message.strip().lower()
+    phrases = (
+        "save this", "save that", "save the above", "save the information", "save it",
+        "remember this", "remember that", "store this", "store that",
+        "learn from this and save", "learn from that and save",
+        "save information", "save the context", "save to memory", "save to my memory",
+    )
+    if any(p in lower for p in phrases):
+        return True
+    if "save" in lower and ("website" in lower or "page" in lower or "link" in lower or "portfolio" in lower):
+        return True
+    return False
+
+
+def _get_last_assistant_content(history: Optional[List[dict]]) -> Optional[str]:
+    """Return the content of the most recent assistant message in history."""
+    if not history:
+        return None
+    for item in reversed(history):
+        if (item.get("role") or "").strip().lower() == "assistant":
+            content = (item.get("content") or "").strip()
+            if content:
+                return content
+    return None
+
+
+async def _auto_save_from_context(user_id: str, content: str) -> Optional[str]:
+    """Save content to user memory. Returns 'Stored: [id: ...] ...' on success, None on failure."""
+    if not (content or "").strip():
+        return None
+    text = content.strip()[: _AUTO_SAVE_MAX_CHARS]
+    if len(content.strip()) > _AUTO_SAVE_MAX_CHARS:
+        text += "..."
+    try:
+        m = await create_memory_tool(user_id=user_id, content=text, source="chat")
+        return f"Stored: [id: {m.id}] {m.content[:200]}{'...' if len(m.content) > 200 else ''}"
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Auto-save from context failed for user %s: %s", user_id, e)
+        return None
+
+
+async def _collect_url_context(message: str, max_urls: int = 3) -> tuple[str, List[SearchSource]]:
+    text = message or ""
+    raw_urls = list(URL_PATTERN.findall(text))
+    # Also find bare domains (e.g. soumyamaheshwari.com)
+    for m in BARE_DOMAIN_PATTERN.finditer(text):
+        raw_urls.append(m.group(1))
     contexts = []
     sources: List[SearchSource] = []
-    seen = set()
-    for url in urls:
-        if url in seen:
+    seen: set[str] = set()
+    for raw in raw_urls:
+        url = _normalize_to_url(raw)
+        if not url or url in seen:
             continue
         seen.add(url)
         if len(seen) > max_urls:
@@ -379,7 +468,44 @@ async def run_chat_agent(
     url_context_block, url_sources = await _collect_url_context(message)
     augmented_message = message
     if url_context_block:
-        augmented_message = f"{message}\n\nURL Context:\n{url_context_block}"
+        augmented_message = (
+            f"{message}\n\n"
+            "[The content of the page(s) from the link(s) above has been fetched. Use ONLY this URL Context to answer—do not search the web for the same link or site.]\n\n"
+            f"URL Context:\n{url_context_block}"
+        )
+    else:
+        # We may have tried to fetch URLs but got no content (site blocked, down, or extract failed)
+        if URL_PATTERN.search(message or "") or (message and BARE_DOMAIN_PATTERN.search(" " + (message or ""))):
+            augmented_message = (
+                f"{message}\n\n"
+                "[The page(s) from the link(s) above could not be fetched (site may be down, block crawlers, or unreachable). "
+                "Tell the user the link could not be loaded. Do NOT do a web search and then say 'I couldn't access the website directly but I found...'—that is unhelpful. "
+                "Simply say the page could not be loaded and suggest they try opening it in a browser or try again later.]"
+            )
+
+    # Auto-save when user asks to save: use URL context (same message) or last assistant reply ("save that")
+    memories_saved_this_turn = False
+    if _user_wants_to_save(message):
+        content_to_save: Optional[str] = None
+        if url_context_block:
+            content_to_save = (url_context_block or "").strip()
+        elif history:
+            content_to_save = _get_last_assistant_content(history)
+        if content_to_save:
+            saved_msg = await _auto_save_from_context(user_id, content_to_save)
+            if saved_msg:
+                memories_saved_this_turn = True
+                logger.info("Auto-saved memory for user %s (save-from-context)", user_id)
+                augmented_message = (
+                    f"{augmented_message}\n\n"
+                    "[The following has been saved to your memory. Confirm to the user that you have saved this.]\n"
+                    f"{saved_msg}"
+                )
+            else:
+                augmented_message = (
+                    f"{augmented_message}\n\n"
+                    "[You tried to save but the save failed (e.g. embedding unavailable). Tell the user you could not save and suggest trying again or checking settings.]"
+                )
 
     tools = _build_tools(user_id)
     profile_str = json.dumps(profile, indent=2) if profile else "(no profile info)"
@@ -457,11 +583,13 @@ async def run_chat_agent(
                     sources.append(entry)
 
     all_sources = sources + url_sources
+    memories_saved = memories_saved_this_turn or ("memory_save" in used_tools)
     return ChatResponse(
         reply=cleaned_reply,
         used_tools=used_tools,
         sources=all_sources,
-        web_search_used=web_used or bool(extracted)
+        web_search_used=web_used or bool(extracted),
+        memories_saved=memories_saved,
     )
 
 

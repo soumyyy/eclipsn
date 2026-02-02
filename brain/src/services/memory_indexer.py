@@ -147,8 +147,13 @@ async def process_pending_chunks(batch_size: int = 50) -> int:
         ingestion_ids = {row.ingestion_id for row in rows}
         await mark_ingestions_indexing(ingestion_ids)
         texts = [row.content for row in rows]
-        vectors = await _embed_documents(embeddings, texts)
-        await store_embeddings(rows, vectors)
+        try:
+            vectors = await _embed_documents_resilient(embeddings, texts)
+            await store_embeddings(rows, vectors)
+        except Exception as exc:  # pragma: no cover
+            logger.exception("Embedding failed for %d memory chunks", len(rows))
+            await mark_ingestions_failed(ingestion_ids, str(exc))
+            break
         counts: dict[str, int] = {}
         for row in rows:
             counts[row.ingestion_id] = counts.get(row.ingestion_id, 0) + 1
@@ -164,6 +169,34 @@ async def process_pending_chunks(batch_size: int = 50) -> int:
 async def _embed_documents(embedding_client: OpenAIEmbeddings, texts: Sequence[str]) -> List[List[float]]:
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, embedding_client.embed_documents, list(texts))
+
+
+async def _embed_documents_resilient(
+    embedding_client: OpenAIEmbeddings,
+    texts: Sequence[str],
+    max_retries: int = 3,
+    backoff_base: float = 0.5,
+) -> List[List[float]]:
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            return await _embed_documents(embedding_client, texts)
+        except Exception as exc:  # pragma: no cover - guarded with retries
+            last_exc = exc
+            if attempt < max_retries - 1:
+                await asyncio.sleep(backoff_base * (2 ** attempt))
+                continue
+            break
+    if len(texts) <= 1:
+        raise last_exc or RuntimeError("Embedding failed")
+    mid = max(1, len(texts) // 2)
+    left = await _embed_documents_resilient(
+        embedding_client, texts[:mid], max_retries=max_retries, backoff_base=backoff_base
+    )
+    right = await _embed_documents_resilient(
+        embedding_client, texts[mid:], max_retries=max_retries, backoff_base=backoff_base
+    )
+    return left + right
 
 
 async def mark_ingestions_indexing(ingestion_ids: Iterable[str]) -> None:
@@ -184,6 +217,30 @@ async def mark_ingestions_indexing(ingestion_ids: Iterable[str]) -> None:
                     WHERE id = $1
                     """,
                     ingestion_id
+                )
+
+
+async def mark_ingestions_failed(ingestion_ids: Iterable[str], error_message: str | None) -> None:
+    ids = list({ingestion_id for ingestion_id in ingestion_ids if ingestion_id})
+    if not ids:
+        return
+    message = (error_message or "Embedding failed").strip()
+    if len(message) > 400:
+        message = message[:400]
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            for ingestion_id in ids:
+                await conn.execute(
+                    """
+                    UPDATE memory_ingestions
+                    SET status = 'failed',
+                        error = $2,
+                        completed_at = NOW()
+                    WHERE id = $1
+                    """,
+                    ingestion_id,
+                    message
                 )
 
 

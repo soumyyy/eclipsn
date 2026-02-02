@@ -13,6 +13,7 @@ import whoopRouter from './routes/whoop';
 import calendarRouter from './routes/calendar';
 import internalProfileRouter from './routes/internal/profile';
 import internalGmailRouter from './routes/internal/gmail';
+import internalServiceAccountRouter from './routes/internal/serviceAccounts';
 import cron from 'node-cron';
 import { scheduleGmailJobs } from './jobs/gmailJobs';
 import { attachUserContext } from './middleware/userContext';
@@ -71,6 +72,7 @@ app.get('/health', (_req, res) => {
  */
 app.use('/internal/profile', internalProfileRouter);
 app.use('/internal/gmail', internalGmailRouter);
+app.use('/internal/service-accounts', internalServiceAccountRouter);
 
 // 6. User context (only for frontend API routes)
 app.use(attachUserContext);

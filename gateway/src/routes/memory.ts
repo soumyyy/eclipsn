@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import {
   createMemoryIngestion,
   getLatestMemoryIngestion,
-  insertMemoryChunk,
+  insertMemoryChunks,
   updateMemoryIngestion,
   listMemoryIngestions,
   deleteMemoryIngestion,
@@ -295,18 +295,18 @@ async function processMemoryIngestion(
         const content = await fsPromises.readFile(file.path, 'utf-8');
         const relPath = relativePaths[index] || file.originalname;
         const chunks = chunkMarkdown(content);
-        let chunkIndex = 0;
-        for (const chunk of chunks) {
-          await insertMemoryChunk({
+        if (chunks.length) {
+          await insertMemoryChunks({
             ingestionId,
             userId,
             source: 'bespoke_memory',
             filePath: relPath,
-            chunkIndex,
-            content: chunk,
-            metadata: { size: chunk.length }
+            chunks: chunks.map((chunk, chunkIndex) => ({
+              chunkIndex,
+              content: chunk,
+              metadata: { size: chunk.length }
+            }))
           });
-          chunkIndex += 1;
         }
       } finally {
         processed += 1;
@@ -339,16 +339,103 @@ async function processMemoryIngestion(
   }
 }
 
-function chunkMarkdown(content: string, chunkSize = 1200, overlap = 200): string[] {
+function chunkMarkdown(content: string, chunkSize = 1200, overlap = 200, minChunkSize = 120): string[] {
   const normalized = content.replace(/\r\n/g, '\n').trim();
   if (!normalized) return [];
+
+  const blocks = splitMarkdownBlocks(normalized);
+  const chunks: string[] = [];
+  let current = '';
+
+  const pushCurrent = () => {
+    const trimmed = current.trim();
+    if (trimmed) {
+      chunks.push(trimmed);
+    }
+    current = '';
+  };
+
+  for (const block of blocks) {
+    if (!current) {
+      if (block.length > chunkSize) {
+        chunks.push(...splitLargeBlock(block, chunkSize, overlap));
+        continue;
+      }
+      current = block;
+      continue;
+    }
+    const candidate = `${current}\n\n${block}`;
+    if (candidate.length <= chunkSize) {
+      current = candidate;
+      continue;
+    }
+    pushCurrent();
+    if (block.length > chunkSize) {
+      chunks.push(...splitLargeBlock(block, chunkSize, overlap));
+    } else {
+      current = block;
+    }
+  }
+
+  if (current) {
+    pushCurrent();
+  }
+
+  const filtered = chunks.filter((chunk) => chunk.length >= minChunkSize);
+  return filtered.length ? filtered : chunks;
+}
+
+function splitMarkdownBlocks(text: string): string[] {
+  const lines = text.split('\n');
+  const blocks: string[] = [];
+  let current: string[] = [];
+  let inCode = false;
+
+  const flush = () => {
+    if (!current.length) return;
+    const block = current.join('\n').trim();
+    if (block) blocks.push(block);
+    current = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const isFence = trimmed.startsWith('```');
+    const isHeading = !inCode && /^#{1,6}\s+/.test(trimmed);
+
+    if (isFence) {
+      inCode = !inCode;
+      current.push(line);
+      continue;
+    }
+
+    if (isHeading) {
+      flush();
+      current.push(line);
+      continue;
+    }
+
+    if (!inCode && trimmed === '') {
+      flush();
+      continue;
+    }
+
+    current.push(line);
+  }
+
+  flush();
+  return blocks;
+}
+
+function splitLargeBlock(text: string, chunkSize: number, overlap: number): string[] {
   const chunks: string[] = [];
   let start = 0;
-  while (start < normalized.length) {
-    const end = Math.min(start + chunkSize, normalized.length);
-    chunks.push(normalized.slice(start, end));
-    if (end === normalized.length) break;
-    start = end - overlap;
+  while (start < text.length) {
+    const end = Math.min(start + chunkSize, text.length);
+    const slice = text.slice(start, end).trim();
+    if (slice) chunks.push(slice);
+    if (end >= text.length) break;
+    start = Math.max(0, end - overlap);
   }
   return chunks;
 }

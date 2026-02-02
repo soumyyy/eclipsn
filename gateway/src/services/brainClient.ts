@@ -76,7 +76,16 @@ export async function getExtractLastRun(): Promise<{ last_run_at: string | null 
 }
 
 /** Trigger memory extraction for one user (Gmail + bespoke → user_memories) */
-export async function triggerMemoryExtract(userId: string): Promise<{ gmail_candidates: number; bespoke_candidates: number; inserted: number; skipped: number }> {
+export async function triggerMemoryExtract(userId: string): Promise<{
+  gmail_candidates: number;
+  service_candidates?: number;
+  bespoke_candidates: number;
+  chat_candidates?: number;
+  inserted: number;
+  updated?: number;
+  skipped: number;
+  deleted?: number;
+}> {
   const response = await axios.post(`${config.brainServiceUrl}/memory/extract`, { user_id: userId });
   return response.data;
 }

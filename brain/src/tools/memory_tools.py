@@ -197,10 +197,35 @@ async def forget_memory_tool(user_id: str, memory_id: str) -> str:
             return "That information has been removed from your profile."
         except Exception:  # noqa: BLE001
             return "Could not remove that profile note. Please try again."
+    if memory_id.startswith("gmail:"):
+        thread_id = memory_id.split(":", 1)[1].strip()
+        if not thread_id:
+            return "Please provide a valid Gmail thread id."
+        deleted = await user_memory_store.delete_user_memories_by_source(
+            user_id=user_id,
+            source_type="gmail",
+            source_id=thread_id,
+            scope="extraction",
+        )
+        if deleted:
+            return "That Gmail memory has been forgotten."
+        return "No stored Gmail memory matched that id."
+    if memory_id.startswith("service:"):
+        source_id = memory_id.split(":", 1)[1].strip()
+        if not source_id:
+            return "Please provide a valid service account memory id."
+        deleted = await user_memory_store.delete_user_memories_by_source(
+            user_id=user_id,
+            source_type="service_account",
+            source_id=source_id,
+            scope="extraction",
+        )
+        if deleted:
+            return "That service account memory has been forgotten."
+        return "No stored service account memory matched that id."
     if not _is_user_memory_id(memory_id):
         return (
             "Only stored memories (UUID) or profile notes (profile:0, profile:1, ...) can be forgotten. "
-            "Gmail and Index results (gmail:..., bespoke:...) cannot be removed. "
             "Use the id from a previous memory_lookup result."
         )
     deleted = await user_memory_store.delete_user_memory(memory_id, user_id)

@@ -14,6 +14,16 @@ import { gatewayFetch } from '@/lib/gatewayFetch';
 import { getAbsoluteApiUrl } from '@/lib/api';
 import { useWhoopStatus } from '@/hooks/useWhoopStatus';
 import { ServiceAccountsSettings } from './ServiceAccountsSettings';
+import { get, del } from '@/lib/apiClient';
+
+interface UserMemory {
+  id: string;
+  content: string;
+  source_type?: string;
+  source_id?: string | null;
+  scope?: string | null;
+  confidence?: number | null;
+}
 
 
 interface ProfileModalProps {
@@ -24,12 +34,12 @@ interface ProfileModalProps {
   initialTab?: TabId;
 }
 
-const tabsOrder = ['profile', 'notes', 'connections', 'history', 'settings'] as const;
+const tabsOrder = ['profile', 'saved_memories', 'connections', 'history', 'settings'] as const;
 type TabId = (typeof tabsOrder)[number];
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'profile', label: 'Profile' },
-  { id: 'notes', label: 'Notes' },
+  { id: 'saved_memories', label: 'Saved Memories' },
   { id: 'connections', label: 'Connections' },
   { id: 'history', label: 'History' },
   { id: 'settings', label: 'Settings' }
@@ -58,6 +68,9 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deletePhrase = 'delete account';
   const deleteInputMatches = deleteConfirmationText.trim().toLowerCase() === deletePhrase;
+  const [savedMemories, setSavedMemories] = useState<UserMemory[]>([]);
+  const [savedMemoriesLoading, setSavedMemoriesLoading] = useState(false);
+  const [forgettingMemoryId, setForgettingMemoryId] = useState<string | null>(null);
   const { session, loading, updateProfile, refreshSession } = useSessionContext();
   const { status: gmailStatus, loading: gmailStatusLoading, refresh: refreshGmailStatus } = useGmailStatus();
   const { status: whoopStatus, loading: whoopLoading, disconnect: disconnectWhoop } = useWhoopStatus();
@@ -78,6 +91,31 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       setProfileDraft(profile);
     }
   }, [profile, isEditingProfile]);
+
+  const loadSavedMemories = useCallback(async () => {
+    setSavedMemoriesLoading(true);
+    try {
+      const data = await get('memories?limit=50&offset=0');
+      setSavedMemories(Array.isArray(data.memories) ? data.memories : []);
+    } catch (e) {
+      console.error(e);
+      setSavedMemories([]);
+    } finally {
+      setSavedMemoriesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'saved_memories') {
+      loadSavedMemories();
+    }
+  }, [activeTab, loadSavedMemories]);
+
+  useEffect(() => {
+    const handler = () => loadSavedMemories();
+    window.addEventListener('memories-saved', handler);
+    return () => window.removeEventListener('memories-saved', handler);
+  }, [loadSavedMemories]);
 
   const normalizedNotes: ProfileNote[] = normalizeProfileNotes(profile?.customData?.notes ?? []);
 
@@ -108,28 +146,23 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
       {
         title: 'Identity',
         fields: [
-          { key: 'fullName', label: 'Full name', placeholder: 'Jane Doe' },
-          { key: 'preferredName', label: 'Preferred name', placeholder: 'Callsign' }
+          { key: 'fullName', label: 'Full name' },
+          { key: 'preferredName', label: 'Preferred name' }
         ]
       },
       {
-        title: 'Contact',
+        title: 'Contact & work',
         fields: [
-          { key: 'contactEmail', label: 'Contact email', placeholder: 'you@example.com' },
-          { key: 'phone', label: 'Phone', placeholder: '+1 555 0100' },
-          { key: 'timezone', label: 'Timezone', placeholder: 'America/Los_Angeles' }
+          { key: 'contactEmail', label: 'Email' },
+          { key: 'phone', label: 'Phone' },
+          { key: 'timezone', label: 'Timezone' },
+          { key: 'company', label: 'Company' },
+          { key: 'role', label: 'Role' }
         ]
       },
       {
-        title: 'Work',
-        fields: [
-          { key: 'company', label: 'Company', placeholder: 'Company' },
-          { key: 'role', label: 'Role', placeholder: 'Founder, Operator' }
-        ]
-      },
-      {
-        title: 'Biography',
-        fields: [{ key: 'biography', label: 'Bio', placeholder: 'Tell Eclipsn about your focus', type: 'textarea' }]
+        title: 'Bio',
+        fields: [{ key: 'biography', label: 'About you', type: 'textarea' }]
       }
     ];
 
@@ -304,7 +337,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
             <div className="profile-section-header">
               <h4>{group.title}</h4>
             </div>
-            <div className={`profile-grid ${group.title === 'Biography' ? 'stacked' : ''}`}>
+            <div className={`profile-grid ${group.title === 'Bio' ? 'stacked' : ''}`}>
               {group.fields.map((field) => {
                 const value = (draft as Record<string, unknown>)?.[field.key];
                 const displayValue =
@@ -358,74 +391,58 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
     );
   };
 
-  const renderNotesContent = () => {
-    if (normalizedNotes.length === 0) {
-      return <p className="text-muted">No notes saved yet.</p>;
+  const renderSavedMemoriesContent = () => {
+    if (savedMemoriesLoading) {
+      return (
+        <div className="profile-saved-memories-loading">
+          <p className="text-muted">Loading saved memories…</p>
+        </div>
+      );
+    }
+    if (savedMemories.length === 0) {
+      return (
+        <div className="profile-saved-memories-empty">
+          <p className="text-muted">No saved memories yet.</p>
+          <p className="text-muted text-sm mt-1">Say &quot;remember this&quot; or &quot;save that&quot; in chat to store facts Eclipsn can recall later. You can also manage memories in Settings.</p>
+        </div>
+      );
     }
     return (
-      <section>
+      <section className="profile-saved-memories-list">
         <ul className="profile-notes-modal">
-          {normalizedNotes.map((note, index) => {
-            const isActive = activeNoteIndex === index;
-            const isEditing = editingNoteIndex === index;
-            return (
-              <li
-                key={`${note.text}-${note.timestamp}-${index}`}
-                className={`profile-note-row ${isActive ? 'active' : ''} ${isEditing ? 'editing' : ''}`}
-                onClick={() => handleNoteClick(index)}
-              >
-                <div className="profile-note-content">
-                  {isEditing ? (
-                    <textarea
-                      value={draftNoteText}
-                      onChange={(evt) => setDraftNoteText(evt.target.value)}
-                      rows={3}
-                      disabled={isSubmitting}
-                    />
-                  ) : (
-                    <>
-                      <p>{note.text}</p>
-                      {note.timestamp && <small className="text-muted">{new Date(note.timestamp).toLocaleString()}</small>}
-                    </>
-                  )}
-                </div>
-                <div className="profile-note-actions">
-                  <button
-                    type="button"
-                    className="profile-note-action delete"
-                    disabled={isSubmitting}
-                    onClick={(evt) => {
-                      evt.stopPropagation();
-                      if (isEditing) {
-                        handleCancelEdit();
-                      } else {
-                        handleDeleteNote(index);
-                      }
-                    }}
-                  >
-                    {isEditing ? 'Cancel' : 'Delete'}
-                  </button>
-                  <button
-                    type="button"
-                    className="profile-note-action edit"
-                    disabled={isSubmitting}
-                    onClick={(evt) => {
-                      evt.stopPropagation();
-                      if (isEditing) {
-                        handleSaveNote();
-                      } else {
-                        startEditNote(index);
-                      }
-                    }}
-                  >
-                    {isEditing ? (isSubmitting ? 'Saving…' : 'Save') : 'Edit'}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
+          {savedMemories.map((m) => (
+            <li key={m.id} className="profile-note-row">
+              <div className="profile-note-content">
+                <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                {(m.source_type || m.scope) && (
+                  <small className="text-muted">{(m.source_type || '') + (m.scope ? ` · ${m.scope}` : '')}</small>
+                )}
+              </div>
+              <div className="profile-note-actions">
+                <button
+                  type="button"
+                  className="profile-note-action delete"
+                  disabled={forgettingMemoryId === m.id}
+                  onClick={async (evt) => {
+                    evt.stopPropagation();
+                    if (!confirm('Remove this memory? It will no longer be used for recall.')) return;
+                    try {
+                      setForgettingMemoryId(m.id);
+                      await del(`memories/${m.id}`);
+                      setSavedMemories((prev) => prev.filter((x) => x.id !== m.id));
+                    } catch (e) {
+                      console.error(e);
+                    } finally {
+                      setForgettingMemoryId(null);
+                    }
+                  }}
+                >
+                  {forgettingMemoryId === m.id ? 'Removing…' : 'Forget'}
+                </button>
+              </div>
+            </li>
+          ))}
         </ul>
-        {error && <p className="profile-error">{error}</p>}
       </section>
     );
   };
@@ -611,7 +628,7 @@ export function ProfileModal({ onGmailAction, onOpenBespoke, onClose, gmailActio
 
   const renderActiveContent = () => {
     if (activeTab === 'connections') return renderConnectionsContent();
-    if (activeTab === 'notes') return renderNotesContent();
+    if (activeTab === 'saved_memories') return renderSavedMemoriesContent();
     if (activeTab === 'history') return renderHistoryContent();
     if (activeTab === 'settings') return renderSettingsContent();
     return renderProfileContent();

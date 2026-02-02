@@ -38,6 +38,18 @@ export default function MemoriesPage() {
         loadMemories();
     }, []);
 
+    useEffect(() => {
+        const onMemoriesSaved = () => loadMemories();
+        window.addEventListener('memories-saved', onMemoriesSaved);
+        return () => window.removeEventListener('memories-saved', onMemoriesSaved);
+    }, []);
+
+    useEffect(() => {
+        const onFocus = () => loadMemories();
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, []);
+
     async function handleForget(id: string) {
         if (!confirm('Remove this memory? It will no longer be used for recall.')) return;
         try {
@@ -55,7 +67,7 @@ export default function MemoriesPage() {
     return (
         <div className="max-w-2xl mx-auto space-y-8">
             <header className="border-b border-green-800 pb-4">
-                <h1 className="text-2xl font-bold text-green-300">Memories</h1>
+                <h1 className="text-2xl font-bold text-green-300">Saved Memories</h1>
                 <p className="text-green-600 mt-1">
                     Saved facts and extracted context used for recall. Remove any you no longer want.
                 </p>

@@ -15,7 +15,7 @@ export default function SettingsPage() {
                     href="/settings/memories"
                     className="block p-5 rounded-xl border border-green-800/60 bg-green-950/20 hover:bg-green-900/30 hover:border-green-700/60 transition-colors"
                 >
-                    <h2 className="text-lg font-semibold text-green-300">Memories</h2>
+                    <h2 className="text-lg font-semibold text-green-300">Saved Memories</h2>
                     <p className="text-green-600 text-sm mt-1">
                         View and remove what Eclipsn has learned from chat, Gmail, and your Index.
                     </p>

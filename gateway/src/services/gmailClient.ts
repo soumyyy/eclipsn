@@ -15,6 +15,13 @@ import {
 import { embedEmailText } from './embeddings';
 import { areGmailJobsDisabled } from './gmailJobControl';
 import { emitGmailStatusUpdate } from './gmailStatus';
+import {
+  buildQuery,
+  computeExpiry,
+  mapLabelIds,
+  scoreThread,
+  type MailboxFilter
+} from './gmailThreadClassifier';
 
 export const NO_GMAIL_TOKENS = 'NO_GMAIL_TOKENS';
 export const GMAIL_JOBS_DISABLED = 'GMAIL_JOBS_DISABLED';
@@ -87,9 +94,6 @@ async function getAuthorizedGmail(userId: string) {
   return google.gmail({ version: 'v1', auth: oauth2Client });
 }
 
-/** 'sent' = in:sent (last N); 'inbox' or omit = primary inbox. Used for ingestion order: sent first, then inbox. */
-export type MailboxFilter = 'inbox' | 'sent';
-
 interface ThreadFilters {
   importanceOnly?: boolean;
   maxResults?: number;
@@ -99,6 +103,8 @@ interface ThreadFilters {
   customQuery?: string;
   /** When set, builds query for that mailbox (sent vs inbox). Ignored if customQuery is set. */
   mailbox?: MailboxFilter;
+  /** Used to tag mailbox even when customQuery is provided. */
+  mailboxHint?: MailboxFilter;
 }
 
 export interface FetchThreadsResult {
@@ -214,7 +220,8 @@ export async function fetchRecentThreads(
           link: `https://mail.google.com/mail/u/0/#inbox/${thread.id}`,
           labelIds,
           labelNames,
-          expiresAt: computeExpiry(category, lastMessageAt ?? new Date())
+          expiresAt: computeExpiry(category, lastMessageAt ?? new Date()),
+          mailbox: filters.mailbox ?? filters.mailboxHint ?? null
         };
         summarySlots[index] = summary;
         counts[category] = (counts[category] || 0) + 1;
@@ -466,50 +473,6 @@ export async function getGmailProfile(userId: string): Promise<{ email: string; 
   }
 }
 
-const PROMO_KEYWORDS = ['unsubscribe', 'sale', '% off', 'deal', 'promo', 'special offer'];
-const IMPORTANT_KEYWORDS = ['invoice', 'meeting', 'urgent', 'action required', 'payment', 'schedule'];
-const PROMO_LABELS = new Set([
-  'CATEGORY_PROMOTIONS',
-  'CATEGORY_SOCIAL',
-  'CATEGORY_UPDATES',
-  'CATEGORY_FORUMS'
-]);
-
-const LABEL_NAME_MAP: Record<string, string> = {
-  CATEGORY_PROMOTIONS: 'Promotions',
-  CATEGORY_SOCIAL: 'Social',
-  CATEGORY_UPDATES: 'Updates',
-  CATEGORY_FORUMS: 'Forums',
-  IMPORTANT: 'Important'
-};
-
-function mapLabelIds(ids: string[]): string[] {
-  return ids
-    .filter(Boolean)
-    .map((id) => LABEL_NAME_MAP[id] || id.replace('CATEGORY_', '').toLowerCase());
-}
-
-function buildQuery(
-  startDate?: string,
-  endDate?: string,
-  importanceOnly = true,
-  mailbox?: MailboxFilter
-) {
-  const parts: string[] = [];
-  if (startDate) {
-    parts.push(`after:${startDate}`);
-  }
-  if (endDate) {
-    parts.push(`before:${endDate}`);
-  }
-  if (mailbox === 'sent') {
-    parts.push('in:sent');
-  }
-  if (importanceOnly) {
-    parts.push('category:primary OR label:important');
-  }
-  return parts.join(' ');
-}
 
 function extractErrorReason(error: any): string | undefined {
   if (error?.response?.data?.error) {
@@ -544,49 +507,4 @@ async function handleGmailAuthError(userId: string, error: unknown): Promise<nev
   throw error instanceof Error ? error : new Error(String(error));
 }
 
-function scoreThread(subject: string, snippet: string, sender: string, labelNames: string[]) {
-  let score = 0;
-  let category = 'primary';
-  let isPromotional = false;
-
-  if (labelNames.some((label) => PROMO_LABELS.has(`CATEGORY_${label.toUpperCase()}`))) {
-    category = 'promotions';
-    score -= 2;
-    isPromotional = true;
-  }
-  if (labelNames.includes('Important')) {
-    score += 2;
-  }
-
-  const lowered = (subject + ' ' + snippet).toLowerCase();
-  if (IMPORTANT_KEYWORDS.some((keyword) => lowered.includes(keyword))) {
-    score += 2;
-    category = 'orders';
-  }
-  if (PROMO_KEYWORDS.some((keyword) => lowered.includes(keyword))) {
-    score -= 1;
-    isPromotional = true;
-  }
-  if (/noreply|no-reply|notification/i.test(sender)) {
-    score -= 1;
-  }
-
-  return { importanceScore: score, category, isPromotional };
-}
-
-function computeExpiry(category: string, referenceDate: Date): Date {
-  const base = referenceDate.getTime();
-  const oneDay = 24 * 60 * 60 * 1000;
-
-  if (category === 'primary' || category === 'personal') {
-    return new Date(base + 365 * oneDay);
-  }
-  if (category === 'orders') {
-    return new Date(base + 30 * oneDay);
-  }
-  if (category === 'promotions') {
-    return new Date(base + 7 * oneDay);
-  }
-
-  return new Date(base + 30 * oneDay);
-}
+// scoring helpers moved to gmailThreadClassifier.ts

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { sendChat } from '../services/brainClient';
 import { DEFAULT_CONVERSATION_ID } from '../constants';
-import { getUserProfile } from '../services/db';
+import { ensureConversation, getUserProfile, insertMessage } from '../services/db';
 import { requireUserId } from '../utils/request';
 
 const router = Router();
@@ -45,6 +45,13 @@ router.post('/', async (req, res) => {
   try {
     const userId = requireUserId(req);
     const profile = sanitizeProfile(await getUserProfile(userId));
+    await ensureConversation({ userId, conversationId: DEFAULT_CONVERSATION_ID });
+    await insertMessage({
+      userId,
+      conversationId: DEFAULT_CONVERSATION_ID,
+      role: 'user',
+      text: message
+    });
     const response = await sendChat({
       userId,
       conversationId: DEFAULT_CONVERSATION_ID,
@@ -52,6 +59,14 @@ router.post('/', async (req, res) => {
       history,
       profile
     });
+    if (response?.reply) {
+      await insertMessage({
+        userId,
+        conversationId: DEFAULT_CONVERSATION_ID,
+        role: 'assistant',
+        text: response.reply
+      });
+    }
 
     return res.json(response);
   } catch (error) {

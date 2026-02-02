@@ -64,6 +64,11 @@ export default function ChatPage() {
             : m
         )
       );
+      if (response.memories_saved === true || (response.used_tools && response.used_tools.includes('memory_save'))) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('memories-saved'));
+        }
+      }
     } catch (error) {
       console.error('Chat error', error);
       setMessages((prev) =>

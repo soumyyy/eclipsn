@@ -21,6 +21,7 @@ class ChatResponse(BaseModel):
     used_tools: List[str] = Field(default_factory=list)
     sources: List[SearchSource] = Field(default_factory=list)
     web_search_used: bool = False
+    memories_saved: bool = Field(default=False, description="True when a memory was saved this turn (auto-save or memory_save tool).")
 
 
 class Memory(BaseModel):

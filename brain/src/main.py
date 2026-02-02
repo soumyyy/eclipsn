@@ -95,13 +95,19 @@ async def list_or_search_user_memories(
     offset: int = 0,
     q: str | None = None,
 ):
-    """List user_memories (paginated) or semantic search when q is provided. Used by gateway GET /api/memories."""
+    """List user_memories (paginated) or semantic search when q is provided. Used by gateway GET /api/memories.
+    Gmail-sourced memories are excluded from the list (not shown in Settings UI); fetch and delete still work."""
     from .services import user_memory_store
+    exclude_gmail = ["gmail"]
     try:
         if q and q.strip():
-            rows = await user_memory_store.search_user_memories_by_query(user_id, q.strip(), limit=limit)
+            rows = await user_memory_store.search_user_memories_by_query(
+                user_id, q.strip(), limit=limit, exclude_source_types=exclude_gmail
+            )
             return {"memories": rows, "total": len(rows)}
-        rows = await user_memory_store.list_user_memories(user_id, limit=limit, offset=offset)
+        rows = await user_memory_store.list_user_memories(
+            user_id, limit=limit, offset=offset, exclude_source_types=exclude_gmail
+        )
         return {"memories": rows}
     except Exception as exc:  # pragma: no cover
         logger.exception("List/search user memories failed")

@@ -275,7 +275,7 @@ class InternalGatewayClient:
     async def get_gmail_thread_summaries(
         self, user_id: str, limit: int = 500
     ) -> list[Dict[str, Any]]:
-        """List Gmail thread summaries for extraction (Phase 4). Returns list of {id, threadId, subject, summary, sender}."""
+        """List Gmail thread summaries for extraction. Returns list with threadId/subject/summary/sender/category/lastMessageAt."""
         response = await self._make_request(
             "GET",
             f"/internal/gmail/threads/{user_id}",
@@ -284,6 +284,21 @@ class InternalGatewayClient:
         )
         if not response.get("success"):
             raise InternalAPIError("Failed to list Gmail threads")
+        data = response.get("data") or {}
+        return data.get("threads") or []
+
+    async def get_service_account_thread_summaries(
+        self, user_id: str, limit: int = 200, lookback_days: int = 365
+    ) -> list[Dict[str, Any]]:
+        """List service account thread summaries for extraction."""
+        response = await self._make_request(
+            "GET",
+            f"/internal/service-accounts/threads/{user_id}",
+            user_id=user_id,
+            params={"limit": limit, "lookbackDays": lookback_days},
+        )
+        if not response.get("success"):
+            raise InternalAPIError("Failed to list service account threads")
         data = response.get("data") or {}
         return data.get("threads") or []
     
