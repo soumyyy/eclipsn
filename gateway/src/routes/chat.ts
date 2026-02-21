@@ -98,9 +98,18 @@ router.post('/', upload.array('attachments'), async (req, res) => {
     }
 
     return res.json(response);
-  } catch (error) {
-    console.error('Chat proxy failed', error);
-    return res.status(502).json({ error: 'Failed to reach brain service' });
+  } catch (error: unknown) {
+    const err = error as { code?: string; message?: string; response?: { status: number } };
+    console.error('Chat proxy failed', err?.code || err?.message || error);
+    if (!res.headersSent) {
+      const message =
+        err?.code === 'ECONNREFUSED'
+          ? 'Brain service unreachable. Is the brain running on port 8000?'
+          : err?.code === 'ETIMEDOUT'
+            ? 'Brain service timed out. Check network and that the brain is running.'
+            : 'Failed to reach brain service';
+      return res.status(502).json({ error: message });
+    }
   }
 });
 

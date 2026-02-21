@@ -14,6 +14,8 @@ type ChatMessage = {
   webSearchUsed?: boolean;
   isPlaceholder?: boolean;
   attachments?: Array<{ name: string; size: number }>;
+  /** Preview URLs for image attachments (same order as attachments; undefined for non-images) */
+  attachmentPreviews?: (string | undefined)[];
 };
 
 type QueuedAttachment = {
@@ -89,11 +91,12 @@ export default function ChatPage() {
   const handleAttachmentSelect = useCallback((files: File[]) => {
     const next = files.filter((file) => isAllowedFile(file.name));
     if (!next.length) return;
-    const mapped = next.map((file) => {
+    const mapped: QueuedAttachment[] = next.map((file) => {
       const isImage = file.type.startsWith('image/');
+      const kind: QueuedAttachment['kind'] = isImage ? 'image' : file.type === 'application/pdf' ? 'pdf' : 'other';
       return {
         file,
-        kind: isImage ? 'image' : file.type === 'application/pdf' ? 'pdf' : 'other',
+        kind,
         previewUrl: isImage ? URL.createObjectURL(file) : undefined
       };
     });
@@ -156,7 +159,8 @@ export default function ChatPage() {
       id: crypto.randomUUID(),
       role: 'user',
       content: input.trim() || 'Shared an attachment.',
-      attachments: attachments.map((item) => ({ name: item.file.name, size: item.file.size }))
+      attachments: attachments.map((item) => ({ name: item.file.name, size: item.file.size })),
+      attachmentPreviews: attachments.map((item) => (item.kind === 'image' ? item.previewUrl : undefined))
     };
     const placeholderId = crypto.randomUUID();
     const historyPayload = messages.slice(-6).map(({ role, content }) => ({ role, content }));
@@ -172,9 +176,7 @@ export default function ChatPage() {
     const filesToSend = attachments.map((item) => item.file);
     setMessages((prev) => [...prev, userMessage, placeholderMessage]);
     setInput('');
-    attachments.forEach((item) => {
-      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-    });
+    /* Don't revoke preview URLs for images we sent – they're shown as thumbnails in the message */
     setAttachments([]);
     setIsSending(true);
 
@@ -243,6 +245,7 @@ export default function ChatPage() {
               webSearchUsed={message.webSearchUsed}
               isPlaceholder={message.isPlaceholder}
               attachments={message.attachments}
+              attachmentPreviews={message.attachmentPreviews}
             />
           ))
         )}
@@ -250,77 +253,81 @@ export default function ChatPage() {
       <form
         onSubmit={handleSubmit}
         className={`chat-input-bar flex-shrink-0 ${dragOver ? 'chat-input-bar-dragover' : ''}`}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
       >
-        {attachments.length > 0 && (
-          <div className="chat-attachment-queue">
-            {imagePreviews.map((item) => {
-              const globalIndex = attachments.findIndex((a) => a === item);
-              return (
-                <ImageThumb
-                  key={`img-${globalIndex}-${item.file.name}`}
-                  src={item.previewUrl!}
-                  alt={item.file.name}
-                  onRemove={() => removeAttachment(globalIndex)}
-                />
-              );
-            })}
-            {nonImageAttachments.map((item) => {
-              const globalIndex = attachments.findIndex((a) => a === item);
-              return (
-                <div key={`pill-${globalIndex}-${item.file.name}`} className="attachment-pill-wrap">
-                  <PdfIcon />
-                  <span className="attachment-pill-name" title={item.file.name}>
-                    {item.file.name}
-                  </span>
-                  <button
-                    type="button"
-                    className="attachment-pill-remove"
-                    onClick={() => removeAttachment(globalIndex)}
-                    aria-label="Remove attachment"
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
+        <div
+          className="chat-input-bar-inner"
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+        >
+          {attachments.length > 0 && (
+            <div className="chat-attachment-queue">
+              {imagePreviews.map((item) => {
+                const globalIndex = attachments.findIndex((a) => a === item);
+                return (
+                  <ImageThumb
+                    key={`img-${globalIndex}-${item.file.name}`}
+                    src={item.previewUrl!}
+                    alt={item.file.name}
+                    onRemove={() => removeAttachment(globalIndex)}
+                  />
+                );
+              })}
+              {nonImageAttachments.map((item) => {
+                const globalIndex = attachments.findIndex((a) => a === item);
+                return (
+                  <div key={`pill-${globalIndex}-${item.file.name}`} className="attachment-pill-wrap">
+                    <PdfIcon />
+                    <span className="attachment-pill-name" title={item.file.name}>
+                      {item.file.name}
+                    </span>
+                    <button
+                      type="button"
+                      className="attachment-pill-remove"
+                      onClick={() => removeAttachment(globalIndex)}
+                      aria-label="Remove attachment"
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="chat-input-wrap">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              className="chat-attachment-input"
+              onChange={(e) => {
+                handleAttachmentSelect(Array.from(e.target.files || []));
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              className="chat-attach"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSending}
+              aria-label="Add attachment"
+              title="Add attachment (images, PDF)"
+            >
+              <AttachIcon />
+            </button>
+            <input
+              type="text"
+              value={input}
+              placeholder="Message…"
+              onChange={(e) => setInput(e.target.value)}
+              onPaste={handlePaste}
+              className="chat-input"
+            />
+            <button type="submit" disabled={isSending} className="chat-send">
+              {isSending ? 'Sending…' : 'Send'}
+            </button>
           </div>
-        )}
-        <div className="chat-input-wrap">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.png,.jpg,.jpeg,.webp"
-            className="chat-attachment-input"
-            onChange={(e) => {
-              handleAttachmentSelect(Array.from(e.target.files || []));
-              e.target.value = '';
-            }}
-          />
-          <button
-            type="button"
-            className="chat-attach"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isSending}
-            aria-label="Add attachment"
-            title="Add attachment (images, PDF)"
-          >
-            <AttachIcon />
-          </button>
-          <input
-            type="text"
-            value={input}
-            placeholder="Message…"
-            onChange={(e) => setInput(e.target.value)}
-            onPaste={handlePaste}
-            className="chat-input"
-          />
-          <button type="submit" disabled={isSending} className="chat-send">
-            {isSending ? 'Sending…' : 'Send'}
-          </button>
         </div>
       </form>
     </div>

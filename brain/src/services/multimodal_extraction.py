@@ -23,6 +23,7 @@ class AttachmentResult:
     mime_type: str
     text: str
     summary: str
+    description: str
     user_facts: List[str]
     source_hash: str
 
@@ -41,13 +42,18 @@ def _hash_bytes(data: bytes) -> str:
     return hashlib.sha1(data).hexdigest()
 
 
-async def _vision_ocr_image(client: AsyncOpenAI, image_bytes: bytes, mime_type: str) -> str:
-    prompt = "Extract all readable text from this image. Return plain text only."
+async def _vision_analyze_image(client: AsyncOpenAI, image_bytes: bytes, mime_type: str) -> tuple[str, str, List[str]]:
+    prompt = (
+        "Analyze this image. If it contains patterns, diagrams, charts, or visual structure, interpret them. "
+        "Extract any readable text only if it is important. "
+        "Return ONLY JSON: {\"description\": \"...\", \"summary\": \"...\", \"extracted_text\": \"...\", \"user_facts\": [\"...\"]}. "
+        "Keep description < 400 chars, summary < 400 chars. If no user facts, return []."
+    )
     data_url = _data_url(mime_type, image_bytes)
     response = await client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a precise OCR engine."},
+            {"role": "system", "content": "You are a multimodal analyst that interprets images."},
             {
                 "role": "user",
                 "content": [
@@ -57,9 +63,25 @@ async def _vision_ocr_image(client: AsyncOpenAI, image_bytes: bytes, mime_type: 
             },
         ],
         max_tokens=800,
-        temperature=0.0,
+        temperature=0.1,
     )
-    return (response.choices[0].message.content or "").strip()
+    raw = (response.choices[0].message.content or "").strip()
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return "", "", []
+    description = _normalize_text(payload.get("description", ""))
+    summary = _normalize_text(payload.get("summary", ""))
+    extracted_text = _normalize_text(payload.get("extracted_text", ""))
+    facts = payload.get("user_facts") or []
+    if not isinstance(facts, list):
+        facts = []
+    facts = [_normalize_text(str(item)) for item in facts if _normalize_text(str(item))]
+    return description, f"{summary}\n{extracted_text}".strip(), facts
 
 
 async def _summarize_and_extract_facts(client: AsyncOpenAI, text: str) -> tuple[str, List[str]]:
@@ -137,13 +159,14 @@ async def extract_attachment(attachment: dict) -> Optional[AttachmentResult]:
     source_hash = _hash_bytes(raw_bytes)
 
     if mime_type.startswith("image/"):
-        text = await _vision_ocr_image(client, raw_bytes, mime_type)
-        summary, facts = await _summarize_and_extract_facts(client, text)
+        description, combined, facts = await _vision_analyze_image(client, raw_bytes, mime_type)
+        summary = _normalize_text(combined)
         return AttachmentResult(
             filename=filename,
             mime_type=mime_type,
-            text=text,
+            text=combined,
             summary=summary,
+            description=description,
             user_facts=facts,
             source_hash=source_hash,
         )
@@ -169,6 +192,7 @@ async def extract_attachment(attachment: dict) -> Optional[AttachmentResult]:
             mime_type=mime_type,
             text=combined,
             summary=summary,
+            description="",
             user_facts=facts,
             source_hash=source_hash,
         )
@@ -179,10 +203,16 @@ async def extract_attachment(attachment: dict) -> Optional[AttachmentResult]:
 def build_attachment_context(results: List[AttachmentResult]) -> str:
     blocks: List[str] = []
     for item in results:
-        text = item.text.strip()
-        if not text:
-            continue
-        if len(text) > MAX_ATTACHMENT_CONTEXT_CHARS:
-            text = text[:MAX_ATTACHMENT_CONTEXT_CHARS] + "..."
-        blocks.append(f"Attachment: {item.filename}\nExtracted text:\n{text}")
+        parts: List[str] = []
+        if item.description:
+            parts.append(f"Description: {item.description}")
+        if item.summary:
+            parts.append(f"Summary: {item.summary}")
+        if item.text and item.text not in item.summary:
+            text = item.text.strip()
+            if len(text) > MAX_ATTACHMENT_CONTEXT_CHARS:
+                text = text[:MAX_ATTACHMENT_CONTEXT_CHARS] + "..."
+            parts.append(f"Extracted text:\n{text}")
+        if parts:
+            blocks.append(f"Attachment: {item.filename}\n" + "\n".join(parts))
     return "\n\n".join(blocks)

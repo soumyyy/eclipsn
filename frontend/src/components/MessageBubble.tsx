@@ -16,6 +16,8 @@ interface MessageBubbleProps {
   webSearchUsed?: boolean;
   isPlaceholder?: boolean;
   attachments?: Array<{ name: string; size: number }>;
+  /** Preview URLs for image attachments (same order as attachments; undefined for non-images) */
+  attachmentPreviews?: (string | undefined)[];
 }
 
 function isImageAttachment(name: string): boolean {
@@ -61,7 +63,8 @@ export function MessageBubble({
   sources,
   webSearchUsed,
   isPlaceholder,
-  attachments
+  attachments,
+  attachmentPreviews
 }: MessageBubbleProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const isUser = role === 'user';
@@ -85,14 +88,29 @@ export function MessageBubble({
             <MarkdownRenderer content={content} />
             {isUser && attachments && attachments.length > 0 && (
               <div className="message-attachments">
-                {attachments.map((file) => (
-                  <span key={file.name} className="message-attachment-item">
-                    <AttachmentIcon name={file.name} />
-                    <span className="message-attachment-name" title={file.name}>
-                      {file.name}
+                {attachments.map((file, i) => {
+                  const previewUrl = attachmentPreviews?.[i];
+                  if (previewUrl && isImageAttachment(file.name)) {
+                    return (
+                      <div key={`${file.name}-${i}`} className="message-attachment-thumb-wrap">
+                        <img
+                          src={previewUrl}
+                          alt={file.name}
+                          className="message-attachment-thumb"
+                          loading="lazy"
+                        />
+                      </div>
+                    );
+                  }
+                  return (
+                    <span key={`${file.name}-${i}`} className="message-attachment-item">
+                      <AttachmentIcon name={file.name} />
+                      <span className="message-attachment-name" title={file.name}>
+                        {file.name}
+                      </span>
                     </span>
-                  </span>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>

@@ -10,15 +10,22 @@ interface ChatPayload {
   attachments?: Array<{ filename: string; mime_type: string; data_base64: string }>;
 }
 
+/** Chat can take a long time (LLM + optional web search). Use a long timeout to avoid socket hang up. */
+const CHAT_TIMEOUT_MS = 180_000; // 3 minutes
+
 export async function sendChat(payload: ChatPayload) {
-  const response = await axios.post(`${config.brainServiceUrl}/chat`, {
-    user_id: payload.userId,
-    conversation_id: payload.conversationId,
-    message: payload.message,
-    history: payload.history ?? [],
-    profile: payload.profile ?? null,
-    attachments: payload.attachments ?? []
-  });
+  const response = await axios.post(
+    `${config.brainServiceUrl}/chat`,
+    {
+      user_id: payload.userId,
+      conversation_id: payload.conversationId,
+      message: payload.message,
+      history: payload.history ?? [],
+      profile: payload.profile ?? null,
+      attachments: payload.attachments ?? []
+    },
+    { timeout: CHAT_TIMEOUT_MS }
+  );
 
   return response.data;
 }
